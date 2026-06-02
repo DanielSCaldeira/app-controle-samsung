@@ -88,10 +88,63 @@ São duas, complementares (ver `architecture.md` §13):
 - **Permissões:** apenas rede (`INTERNET`, `ACCESS_NETWORK_STATE`, `ACCESS_WIFI_STATE`,
   `CHANGE_WIFI_MULTICAST_STATE`). Sem localização, armazenamento ou telemetria.
 
-## 6. Troubleshooting
+## 6. Instalando em um celular físico (device real)
+
+`make install-debug` **compila e instala** o APK debug no aparelho conectado.
+O build em si **não exige** device algum — se ele falhar com
+`com.android.builder.testing.api.DeviceException: No connected devices!`, o
+**APK foi gerado com sucesso**; o erro indica apenas que **não há device nem
+emulador conectado** no momento da instalação. Conecte um aparelho (ou suba um
+emulador) e rode de novo.
+
+Passo a passo para um celular Samsung/Android real:
+
+1. **Habilite as Opções do desenvolvedor.** Em *Configurações → Sobre o telefone
+   → Informações de software*, toque **7 vezes** em **Número da versão (build)**
+   até aparecer "Você agora é um desenvolvedor".
+2. **Ative a Depuração USB.** Em *Configurações → Opções do desenvolvedor*,
+   ligue **Depuração USB** (e, se for instalar por loja/sideload, **Instalar via
+   USB**).
+3. **Conecte por USB e autorize o computador.** Use um cabo de **dados** (não só
+   de carga). Na primeira conexão o aparelho exibe o prompt **"Permitir
+   depuração USB?"** com a impressão digital RSA — marque *Sempre permitir deste
+   computador* e toque **Permitir**. Se o aparelho aparecer como `unauthorized`
+   em `adb devices`, é esse prompt que está pendente.
+4. **Alternativa: depuração sem fio (Android 11+).** Em *Opções do desenvolvedor
+   → Depuração sem fio*, ative e use **Parear dispositivo com código**:
+
+   ```sh
+   adb pair <ip>:<porta-de-pareamento>   # informe o código mostrado no aparelho
+   adb connect <ip>:<porta>              # porta de conexão exibida na mesma tela
+   ```
+
+   O telefone e o computador precisam estar na **mesma rede Wi-Fi**.
+5. **Verifique o device antes de instalar.** Rode `make doctor` (checa Java,
+   `adb` e dispositivos) ou `make adb-devices`. O aparelho deve aparecer com o
+   status `device` (não `unauthorized` nem `offline`):
+
+   ```
+   List of devices attached
+   R5CN30XXXXX     device
+   ```
+6. **Instale e abra o app.** Com o device listado:
+
+   ```sh
+   make install-debug   # ./gradlew :app:installDebug
+   make app-start       # abre o app no aparelho
+   ```
+
+> Se `adb devices` não listar nada mesmo com o cabo conectado: troque o cabo/porta
+> USB, confira o modo de conexão USB (escolha *Transferência de arquivos / MTP*),
+> e no Windows instale o **driver USB da Samsung**. Depois force um reinício do
+> servidor adb com `adb kill-server && adb start-server`.
+
+## 7. Troubleshooting
 
 | Sintoma | Causa provável | O que fazer |
 |---------|----------------|-------------|
+| `make install-debug` falha com `DeviceException: No connected devices!` | Nenhum celular/emulador conectado (o build em si funcionou) | Conecte um aparelho e verifique com `make doctor` ou `make adb-devices` (status `device`); veja §6 para habilitar Depuração USB / pareamento sem fio; então rode `make install-debug` |
+| Aparelho aparece como `unauthorized` em `make adb-devices` | Prompt de autorização RSA não aceito no celular | Reconecte o cabo e toque **Permitir** no prompt "Permitir depuração USB?" (marque *Sempre permitir*); veja §6 |
 | Nenhuma TV aparece na descoberta | Multicast (SSDP/mDNS) bloqueado pela rede; telefone em outra VLAN/Wi-Fi de visitantes | Use entrada manual de IP; garanta mesma rede; verifique `CHANGE_WIFI_MULTICAST_STATE` |
 | Pareamento falha / não aparece prompt na TV | Token expirado/revogado; TLS auto-assinado rejeitado | Re-parear; o `LanTrustManager` aceita o cert da TV só na sessão LAN |
 | Comandos param de funcionar de repente | Queda de Wi-Fi → reconexão em curso | Observe o estado (`Reconnecting`); volta sozinho, ou aparece `Error` ao esgotar tentativas |
