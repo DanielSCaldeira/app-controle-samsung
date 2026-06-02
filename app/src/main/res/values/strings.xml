@@ -51,4 +51,30 @@
     <string name="remote_app_prime">Prime Video</string>
     <string name="remote_app_disney">Disney+</string>
     <string name="remote_app_youtube">YouTube</string>
+
+    <!-- Accessibility (TalkBack) content descriptions for the remote controls.
+         Spoken aloud by screen readers, so they spell out the action in words even
+         where the visible label is an arrow, abbreviation or media glyph. -->
+    <string name="remote_cd_up">Navigate up</string>
+    <string name="remote_cd_down">Navigate down</string>
+    <string name="remote_cd_left">Navigate left</string>
+    <string name="remote_cd_right">Navigate right</string>
+    <string name="remote_cd_ok">OK, select</string>
+    <string name="remote_cd_return">Return</string>
+    <string name="remote_cd_home">Home</string>
+    <string name="remote_cd_menu">Menu</string>
+    <string name="remote_cd_power">Power</string>
+    <string name="remote_cd_vol_up">Volume up</string>
+    <string name="remote_cd_vol_down">Volume down</string>
+    <string name="remote_cd_mute">Mute</string>
+    <string name="remote_cd_ch_up">Channel up</string>
+    <string name="remote_cd_ch_down">Channel down</string>
+    <string name="remote_cd_rew">Rewind</string>
+    <string name="remote_cd_play">Play</string>
+    <string name="remote_cd_pause">Pause</string>
+    <string name="remote_cd_stop">Stop</string>
+    <string name="remote_cd_ff">Fast forward</string>
+    <string name="remote_cd_text_send">Send text to TV</string>
+    <string name="remote_cd_digit">Digit %1$d</string>
+    <string name="remote_cd_app_launch">Launch %1$s</string>
 </resources>

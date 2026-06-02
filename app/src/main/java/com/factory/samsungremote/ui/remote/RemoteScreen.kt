@@ -212,13 +212,14 @@ fun RemoteScreen(
             TopAppBar(
                 title = { Text(stringResource(R.string.remote_title)) },
                 actions = {
+                    val powerDescription = stringResource(R.string.remote_cd_power)
                     IconButton(
                         onClick = { press(KeyPower) },
                         modifier = Modifier
                             .sizeIn(minWidth = MinTouchTarget, minHeight = MinTouchTarget)
                             .testTag(RemoteTestTags.POWER)
                             .semantics {
-                                contentDescription = "Power"
+                                contentDescription = powerDescription
                             },
                     ) {
                         Text("⏻", style = MaterialTheme.typography.titleLarge)
@@ -263,6 +264,7 @@ private fun DPad(
     ) {
         DirButton(
             label = stringResource(R.string.remote_dpad_up),
+            contentDescription = stringResource(R.string.remote_cd_up),
             tag = RemoteTestTags.DPAD_UP,
             onClick = { onPress(KeyUp) },
         )
@@ -272,18 +274,21 @@ private fun DPad(
         ) {
             DirButton(
                 label = stringResource(R.string.remote_dpad_left),
+                contentDescription = stringResource(R.string.remote_cd_left),
                 tag = RemoteTestTags.DPAD_LEFT,
                 onClick = { onPress(KeyLeft) },
             )
             OkButton(onClick = { onPress(KeyEnter) })
             DirButton(
                 label = stringResource(R.string.remote_dpad_right),
+                contentDescription = stringResource(R.string.remote_cd_right),
                 tag = RemoteTestTags.DPAD_RIGHT,
                 onClick = { onPress(KeyRight) },
             )
         }
         DirButton(
             label = stringResource(R.string.remote_dpad_down),
+            contentDescription = stringResource(R.string.remote_cd_down),
             tag = RemoteTestTags.DPAD_DOWN,
             onClick = { onPress(KeyDown) },
         )
@@ -303,16 +308,19 @@ private fun NavRow(
     ) {
         NavButton(
             label = stringResource(R.string.remote_return),
+            contentDescription = stringResource(R.string.remote_cd_return),
             tag = RemoteTestTags.RETURN,
             onClick = { onPress(KeyReturn) },
         )
         NavButton(
             label = stringResource(R.string.remote_home),
+            contentDescription = stringResource(R.string.remote_cd_home),
             tag = RemoteTestTags.HOME,
             onClick = { onPress(KeyHome) },
         )
         NavButton(
             label = stringResource(R.string.remote_menu),
+            contentDescription = stringResource(R.string.remote_cd_menu),
             tag = RemoteTestTags.MENU,
             onClick = { onPress(KeyMenu) },
         )
@@ -361,11 +369,13 @@ private fun TextEntryRow(
                 .sizeIn(minHeight = MinTouchTarget)
                 .testTag(RemoteTestTags.TEXT_INPUT),
         )
+        val sendDescription = stringResource(R.string.remote_cd_text_send)
         Button(
             onClick = submit,
             modifier = Modifier
                 .sizeIn(minWidth = MinTouchTarget, minHeight = MinTouchTarget)
-                .testTag(RemoteTestTags.TEXT_SEND),
+                .testTag(RemoteTestTags.TEXT_SEND)
+                .semantics { contentDescription = sendDescription },
         ) {
             Text(stringResource(R.string.remote_text_send))
         }
@@ -389,26 +399,31 @@ private fun VolumeChannelRow(
     ) {
         NavButton(
             label = stringResource(R.string.remote_vol_down),
+            contentDescription = stringResource(R.string.remote_cd_vol_down),
             tag = RemoteTestTags.VOL_DOWN,
             onClick = { onPress(KeyVolDown) },
         )
         NavButton(
             label = stringResource(R.string.remote_mute),
+            contentDescription = stringResource(R.string.remote_cd_mute),
             tag = RemoteTestTags.MUTE,
             onClick = { onPress(KeyMute) },
         )
         NavButton(
             label = stringResource(R.string.remote_vol_up),
+            contentDescription = stringResource(R.string.remote_cd_vol_up),
             tag = RemoteTestTags.VOL_UP,
             onClick = { onPress(KeyVolUp) },
         )
         NavButton(
             label = stringResource(R.string.remote_ch_down),
+            contentDescription = stringResource(R.string.remote_cd_ch_down),
             tag = RemoteTestTags.CH_DOWN,
             onClick = { onPress(KeyChDown) },
         )
         NavButton(
             label = stringResource(R.string.remote_ch_up),
+            contentDescription = stringResource(R.string.remote_cd_ch_up),
             tag = RemoteTestTags.CH_UP,
             onClick = { onPress(KeyChUp) },
         )
@@ -469,26 +484,31 @@ private fun MediaRow(
     ) {
         NavButton(
             label = stringResource(R.string.remote_rew),
+            contentDescription = stringResource(R.string.remote_cd_rew),
             tag = RemoteTestTags.REW,
             onClick = { onPress(KeyRew) },
         )
         NavButton(
             label = stringResource(R.string.remote_play),
+            contentDescription = stringResource(R.string.remote_cd_play),
             tag = RemoteTestTags.PLAY,
             onClick = { onPress(KeyPlay) },
         )
         NavButton(
             label = stringResource(R.string.remote_pause),
+            contentDescription = stringResource(R.string.remote_cd_pause),
             tag = RemoteTestTags.PAUSE,
             onClick = { onPress(KeyPause) },
         )
         NavButton(
             label = stringResource(R.string.remote_stop),
+            contentDescription = stringResource(R.string.remote_cd_stop),
             tag = RemoteTestTags.STOP,
             onClick = { onPress(KeyStop) },
         )
         NavButton(
             label = stringResource(R.string.remote_ff),
+            contentDescription = stringResource(R.string.remote_cd_ff),
             tag = RemoteTestTags.FF,
             onClick = { onPress(KeyFf) },
         )
@@ -535,53 +555,69 @@ private fun ShortcutRow(
     }
 }
 
-/** A directional (arrow) D-pad button with a ≥ 48 dp touch target. */
+/**
+ * A directional (arrow) D-pad button with a ≥ 48 dp touch target and an explicit
+ * [contentDescription] so TalkBack announces the direction in words ("Navigate up")
+ * rather than the bare arrow [label].
+ */
 @Composable
 private fun DirButton(
     label: String,
+    contentDescription: String,
     tag: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val description = contentDescription
     FilledTonalButton(
         onClick = onClick,
         modifier = modifier
             .sizeIn(minWidth = MinTouchTarget, minHeight = MinTouchTarget)
-            .testTag(tag),
+            .testTag(tag)
+            .semantics { this.contentDescription = description },
     ) {
         Text(label)
     }
 }
 
-/** The center OK / ENTER button. */
+/** The center OK / ENTER button, with an explicit TalkBack description. */
 @Composable
 private fun OkButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val description = stringResource(R.string.remote_cd_ok)
     Button(
         onClick = onClick,
         modifier = modifier
             .sizeIn(minWidth = MinTouchTarget, minHeight = MinTouchTarget)
-            .testTag(RemoteTestTags.OK),
+            .testTag(RemoteTestTags.OK)
+            .semantics { contentDescription = description },
     ) {
         Text(stringResource(R.string.remote_ok))
     }
 }
 
-/** A secondary navigation button (RETURN / HOME / MENU) with a ≥ 48 dp target. */
+/**
+ * A secondary navigation button (RETURN / HOME / MENU, VOL / CH, media transport)
+ * with a ≥ 48 dp target and an explicit [contentDescription] so TalkBack announces
+ * the action in words even when the visible [label] is an abbreviation or glyph.
+ */
 @Composable
 private fun NavButton(
     label: String,
+    contentDescription: String,
     tag: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val description = contentDescription
     OutlinedButton(
         onClick = onClick,
         modifier = modifier
             .sizeIn(minWidth = MinTouchTarget, minHeight = MinTouchTarget)
-            .testTag(tag),
+            .testTag(tag)
+            .semantics { this.contentDescription = description },
     ) {
         Text(label)
     }
@@ -589,8 +625,9 @@ private fun NavButton(
 
 /**
  * A single numeric-keypad button. Labeled with [digit] (0–9) and tagged with
- * [RemoteTestTags.digit] so tests can locate each digit; honors the ≥ 48 dp
- * touch target like every other control.
+ * [RemoteTestTags.digit] so tests can locate each digit; carries an explicit
+ * TalkBack description ("Digit N") and honors the ≥ 48 dp touch target like every
+ * other control.
  */
 @Composable
 private fun DigitButton(
@@ -598,17 +635,22 @@ private fun DigitButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val description = stringResource(R.string.remote_cd_digit, digit)
     FilledTonalButton(
         onClick = onClick,
         modifier = modifier
             .sizeIn(minWidth = MinTouchTarget, minHeight = MinTouchTarget)
-            .testTag(RemoteTestTags.digit(digit)),
+            .testTag(RemoteTestTags.digit(digit))
+            .semantics { contentDescription = description },
     ) {
         Text(digit.toString())
     }
 }
 
-/** A streaming app shortcut button (Netflix / Prime / Disney+ / YouTube). */
+/**
+ * A streaming app shortcut button (Netflix / Prime / Disney+ / YouTube), with an
+ * explicit "Launch <app>" TalkBack description derived from [label].
+ */
 @Composable
 private fun ShortcutButton(
     label: String,
@@ -616,11 +658,13 @@ private fun ShortcutButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val description = stringResource(R.string.remote_cd_app_launch, label)
     FilledTonalButton(
         onClick = onClick,
         modifier = modifier
             .sizeIn(minWidth = MinTouchTarget, minHeight = MinTouchTarget)
-            .testTag(tag),
+            .testTag(tag)
+            .semantics { contentDescription = description },
     ) {
         Text(label)
     }
