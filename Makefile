@@ -17,6 +17,7 @@ APP_ID ?= com.factory.samsungremote
 	help tasks doctor \
 	clean rebuild build \
 	assemble assemble-debug assemble-release \
+	check-device \
 	install install-debug uninstall-debug \
 	test test-debug test-release \
 	android-test connected-check \
@@ -35,6 +36,7 @@ help: ## Mostra esta ajuda com todos os comandos e explicacoes
 	@echo   assemble               Gera APK/AAB das variantes configuradas
 	@echo   assemble-debug         Gera APK debug
 	@echo   assemble-release       Gera APK release
+	@echo   check-device           Verifica se ha ao menos um dispositivo/emulador conectado
 	@echo   install                Alias para instalar a versao debug
 	@echo   install-debug          Compila e instala o app no celular/emulador conectado
 	@echo   uninstall-debug        Remove o app debug do dispositivo conectado
@@ -78,9 +80,26 @@ assemble-debug: ## Gera APK debug
 assemble-release: ## Gera APK release
 	@$(GRADLEW) :app:assembleRelease
 
+check-device: ## Verifica se ha ao menos um dispositivo/emulador conectado
+	@count=`adb devices | grep -w device | wc -l`; \
+	if [ "$$count" -lt 1 ]; then \
+		echo "============================================================"; \
+		echo "Nenhum dispositivo/emulador conectado foi detectado."; \
+		echo ""; \
+		echo "Para instalar o app, faca o seguinte:"; \
+		echo "  1) Conecte o celular via USB com a depuracao USB ativada"; \
+		echo "     (Configuracoes > Opcoes do desenvolvedor > Depuracao USB)."; \
+		echo "  2) Autorize o prompt 'Permitir depuracao USB?' na tela do celular."; \
+		echo "  3) Rode 'make adb-devices' (ou 'make doctor') para confirmar"; \
+		echo "     que o dispositivo aparece como 'device'."; \
+		echo "  4) Tente novamente: 'make install-debug'."; \
+		echo "============================================================"; \
+		exit 1; \
+	fi
+
 install: install-debug ## Alias para instalar a versao debug
 
-install-debug: ## Compila e instala o app no celular/emulador conectado
+install-debug: check-device ## Compila e instala o app no celular/emulador conectado
 	@$(GRADLEW) :app:installDebug
 
 uninstall-debug: ## Remove o app debug do dispositivo conectado
