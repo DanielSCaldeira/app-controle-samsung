@@ -44,6 +44,21 @@ class RemoteScreenTest {
         RemoteTestTags.HOME to "KEY_HOME",
         RemoteTestTags.MENU to "KEY_MENU",
         RemoteTestTags.POWER to "KEY_POWER",
+        // Media transport bar (task a7e024f7 — play/pause/stop/rew/ff).
+        RemoteTestTags.REW to "KEY_REW",
+        RemoteTestTags.PLAY to "KEY_PLAY",
+        RemoteTestTags.PAUSE to "KEY_PAUSE",
+        RemoteTestTags.STOP to "KEY_STOP",
+        RemoteTestTags.FF to "KEY_FF",
+    )
+
+    /** Just the media-transport controls added by task a7e024f7. */
+    private val mediaControls: List<Pair<String, String>> = listOf(
+        RemoteTestTags.REW to "KEY_REW",
+        RemoteTestTags.PLAY to "KEY_PLAY",
+        RemoteTestTags.PAUSE to "KEY_PAUSE",
+        RemoteTestTags.STOP to "KEY_STOP",
+        RemoteTestTags.FF to "KEY_FF",
     )
 
     @Test
@@ -100,5 +115,41 @@ class RemoteScreenTest {
         // No control is hard-coded to the same key as another (D-pad + OK = 5 distinct).
         val codes = emitted.filterIsInstance<RemoteIntent.PressKey>().map { it.key.code }
         assertEquals(listOf("KEY_UP", "KEY_DOWN", "KEY_LEFT", "KEY_RIGHT", "KEY_ENTER"), codes)
+    }
+
+    @Test
+    fun tappingEachMediaButton_firesItsRemoteKey() {
+        val emitted = mutableListOf<RemoteIntent>()
+        composeRule.setContent {
+            RemoteScreen(onIntent = { emitted += it })
+        }
+
+        // Each media-transport button fires the matching RemoteKey on the fake.
+        mediaControls.forEach { (tag, expectedCode) ->
+            emitted.clear()
+            composeRule.onNodeWithTag(tag).assertIsDisplayed()
+            composeRule.onNodeWithTag(tag).performClick()
+
+            assertEquals("media control $tag should emit one intent", 1, emitted.size)
+            assertEquals(
+                "media control $tag should emit its PressKey",
+                RemoteIntent.PressKey(RemoteKeyCatalog.findByCode(expectedCode)!!),
+                emitted.single(),
+            )
+        }
+    }
+
+    @Test
+    fun mediaButtons_emitDistinctKeysInBarOrder() {
+        val emitted = mutableListOf<RemoteIntent>()
+        composeRule.setContent {
+            RemoteScreen(onIntent = { emitted += it })
+        }
+
+        mediaControls.forEach { (tag, _) -> composeRule.onNodeWithTag(tag).performClick() }
+
+        // REW / PLAY / PAUSE / STOP / FF — five distinct keys, none hard-coded to another.
+        val codes = emitted.filterIsInstance<RemoteIntent.PressKey>().map { it.key.code }
+        assertEquals(listOf("KEY_REW", "KEY_PLAY", "KEY_PAUSE", "KEY_STOP", "KEY_FF"), codes)
     }
 }
