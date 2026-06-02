@@ -75,7 +75,7 @@ class RemoteSession @Inject constructor(
     private val initialBackoffMillis: Long = DEFAULT_INITIAL_BACKOFF_MILLIS,
     private val maxBackoffMillis: Long = DEFAULT_MAX_BACKOFF_MILLIS,
     private val maxReconnectAttempts: Int = DEFAULT_MAX_RECONNECT_ATTEMPTS,
-) {
+) : CommandTransport {
 
     private val _state = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
 
@@ -146,8 +146,12 @@ class RemoteSession @Inject constructor(
     /**
      * Writes [frame] to the open socket. Returns `false` when no socket is
      * currently connected (the caller can react to [state] instead of throwing).
+     *
+     * Implements [CommandTransport] so the domain
+     * [com.factory.samsungremote.data.repository.CommandRepository] can write
+     * protocol frames through the single live connection.
      */
-    private fun send(frame: String): Boolean = currentSocket.get()?.send(frame) ?: false
+    override fun send(frame: String): Boolean = currentSocket.get()?.send(frame) ?: false
 
     /**
      * Runs the connection loop for [target]: open the socket, stay connected, and

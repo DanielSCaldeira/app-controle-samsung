@@ -1,6 +1,7 @@
 package com.factory.samsungremote.di
 
 import com.factory.samsungremote.network.pairing.LanTrustManager
+import com.factory.samsungremote.network.session.CommandTransport
 import com.factory.samsungremote.network.session.RemoteSession
 import dagger.Module
 import dagger.Provides
@@ -63,4 +64,13 @@ object SessionModule {
         socketFactory = client,
         scope = scope,
     )
+
+    /**
+     * Exposes the live [RemoteSession] as the [CommandTransport] the domain
+     * [com.factory.samsungremote.data.repository.CommandRepository] writes
+     * protocol frames through.
+     */
+    @Provides
+    @Singleton
+    fun provideCommandTransport(session: RemoteSession): CommandTransport = session
 }
