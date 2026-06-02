@@ -1,0 +1,129 @@
+{
+  "_comment": [
+    "VERSIONED wire contract for the Samsung Tizen remote-control protocol as",
+    "produced by the isolated `protocol/` layer (ADR-0003; architecture risk row",
+    "'Camada protocol/ isolada e versionada; testes de contrato').",
+    "",
+    "Each `send_cases` entry pins the EXACT compact JSON the TV must receive for a",
+    "domain action; each `parse_cases` entry pins what the parser must extract from",
+    "an incoming TV message. These golden values are frozen for this protocol",
+    "version: any change to TizenProtocol that alters the wire format breaks this",
+    "suite on purpose. A breaking protocol revision must land as a NEW file",
+    "(tizen_protocol_v3.json) rather than by editing these snapshots.",
+    "",
+    "Base64 values were computed from the UTF-8 bytes of the source text."
+  ],
+  "protocol": "samsung-tizen-ws",
+  "version": "2",
+  "endpoint": "/api/v2/channels/samsung.remote.control",
+
+  "send_cases": {
+    "key_click_volup": {
+      "op": "sendKey",
+      "args": { "keyCode": "KEY_VOLUP", "command": "CLICK" },
+      "expected": "{\"method\":\"ms.remote.control\",\"params\":{\"Cmd\":\"Click\",\"DataOfCmd\":\"KEY_VOLUP\",\"Option\":\"false\",\"TypeOfRemote\":\"SendRemoteKey\"}}"
+    },
+    "key_press_volup": {
+      "op": "sendKey",
+      "args": { "keyCode": "KEY_VOLUP", "command": "PRESS" },
+      "expected": "{\"method\":\"ms.remote.control\",\"params\":{\"Cmd\":\"Press\",\"DataOfCmd\":\"KEY_VOLUP\",\"Option\":\"false\",\"TypeOfRemote\":\"SendRemoteKey\"}}"
+    },
+    "key_release_volup": {
+      "op": "sendKey",
+      "args": { "keyCode": "KEY_VOLUP", "command": "RELEASE" },
+      "expected": "{\"method\":\"ms.remote.control\",\"params\":{\"Cmd\":\"Release\",\"DataOfCmd\":\"KEY_VOLUP\",\"Option\":\"false\",\"TypeOfRemote\":\"SendRemoteKey\"}}"
+    },
+    "key_click_enter": {
+      "op": "sendKey",
+      "args": { "keyCode": "KEY_ENTER", "command": "CLICK" },
+      "expected": "{\"method\":\"ms.remote.control\",\"params\":{\"Cmd\":\"Click\",\"DataOfCmd\":\"KEY_ENTER\",\"Option\":\"false\",\"TypeOfRemote\":\"SendRemoteKey\"}}"
+    },
+    "key_click_power": {
+      "op": "sendKey",
+      "args": { "keyCode": "KEY_POWER", "command": "CLICK" },
+      "expected": "{\"method\":\"ms.remote.control\",\"params\":{\"Cmd\":\"Click\",\"DataOfCmd\":\"KEY_POWER\",\"Option\":\"false\",\"TypeOfRemote\":\"SendRemoteKey\"}}"
+    },
+
+    "launch_deeplink_netflix": {
+      "op": "launchApp",
+      "args": { "appId": "11101200001", "actionType": "DEEP_LINK" },
+      "expected": "{\"method\":\"ms.channel.emit\",\"params\":{\"event\":\"ed.apps.launch\",\"to\":\"host\",\"data\":{\"action_type\":\"DEEP_LINK\",\"appId\":\"11101200001\"}}}"
+    },
+    "launch_native_youtube": {
+      "op": "launchApp",
+      "args": { "appId": "3201907018807", "actionType": "NATIVE_LAUNCH" },
+      "expected": "{\"method\":\"ms.channel.emit\",\"params\":{\"event\":\"ed.apps.launch\",\"to\":\"host\",\"data\":{\"action_type\":\"NATIVE_LAUNCH\",\"appId\":\"3201907018807\"}}}"
+    },
+
+    "text_ascii_short": {
+      "op": "sendText",
+      "args": { "text": "hi" },
+      "expected": "{\"method\":\"ms.remote.control\",\"params\":{\"Cmd\":\"aGk=\",\"DataOfCmd\":\"base64\",\"TypeOfRemote\":\"SendInputString\"}}"
+    },
+    "text_ascii_punct": {
+      "op": "sendText",
+      "args": { "text": "Hello, World!" },
+      "expected": "{\"method\":\"ms.remote.control\",\"params\":{\"Cmd\":\"SGVsbG8sIFdvcmxkIQ==\",\"DataOfCmd\":\"base64\",\"TypeOfRemote\":\"SendInputString\"}}"
+    },
+    "text_unicode_accent": {
+      "op": "sendText",
+      "args": { "text": "café" },
+      "expected": "{\"method\":\"ms.remote.control\",\"params\":{\"Cmd\":\"Y2Fmw6k=\",\"DataOfCmd\":\"base64\",\"TypeOfRemote\":\"SendInputString\"}}"
+    },
+    "text_unicode_query": {
+      "op": "sendText",
+      "args": { "text": "Búsqueda 123" },
+      "expected": "{\"method\":\"ms.remote.control\",\"params\":{\"Cmd\":\"QsO6c3F1ZWRhIDEyMw==\",\"DataOfCmd\":\"base64\",\"TypeOfRemote\":\"SendInputString\"}}"
+    },
+    "text_empty": {
+      "op": "sendText",
+      "args": { "text": "" },
+      "expected": "{\"method\":\"ms.remote.control\",\"params\":{\"Cmd\":\"\",\"DataOfCmd\":\"base64\",\"TypeOfRemote\":\"SendInputString\"}}"
+    }
+  },
+
+  "parse_cases": {
+    "token_present": {
+      "op": "parseToken",
+      "input": "{\"event\":\"ms.channel.connect\",\"data\":{\"clients\":[{\"id\":\"x\",\"isHost\":true}],\"id\":\"abc\",\"token\":\"45784122\"}}",
+      "expected": "45784122"
+    },
+    "token_absent": {
+      "op": "parseToken",
+      "input": "{\"event\":\"ms.channel.connect\",\"data\":{\"id\":\"abc\"}}",
+      "expected": null
+    },
+    "token_explicit_null": {
+      "op": "parseToken",
+      "input": "{\"event\":\"ms.channel.connect\",\"data\":{\"token\":null}}",
+      "expected": null
+    },
+    "token_empty_string": {
+      "op": "parseToken",
+      "input": "{\"event\":\"ms.channel.connect\",\"data\":{\"token\":\"\"}}",
+      "expected": null
+    },
+    "token_no_data": {
+      "op": "parseToken",
+      "input": "{\"event\":\"ms.channel.connect\"}",
+      "expected": null
+    },
+    "token_not_json": {
+      "op": "parseToken",
+      "input": "not-a-json",
+      "expected": null
+    },
+    "event_with_token": {
+      "op": "parseEvent",
+      "input": "{\"event\":\"ms.channel.connect\",\"data\":{\"token\":\"45784122\"}}",
+      "expected_event": "ms.channel.connect",
+      "expected_token": "45784122"
+    },
+    "event_without_token": {
+      "op": "parseEvent",
+      "input": "{\"event\":\"ed.installedApp.get\",\"data\":{\"id\":\"abc\"}}",
+      "expected_event": "ed.installedApp.get",
+      "expected_token": null
+    }
+  }
+}
