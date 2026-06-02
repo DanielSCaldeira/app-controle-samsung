@@ -6,4 +6,14 @@
     <string name="discovery_scanning">Searching for TVs…</string>
     <string name="discovery_empty">No TVs found on your network</string>
     <string name="discovery_retry">Scan again</string>
+
+    <!-- Pairing screen -->
+    <string name="pairing_title">Pairing</string>
+    <string name="pairing_instruction">Accept the connection request on your TV</string>
+    <string name="pairing_waiting">Waiting for authorization…</string>
+    <string name="pairing_error_unauthorized">The TV denied the connection. Try again and accept the prompt on your TV.</string>
+    <string name="pairing_error_connection">Couldn\'t reach the TV. Check that it\'s on and on the same network.</string>
+    <string name="pairing_error_no_token">Pairing didn\'t complete. Please try again.</string>
+    <string name="pairing_error_generic">Pairing failed. Please try again.</string>
+    <string name="pairing_retry">Try again</string>
 </resources>
