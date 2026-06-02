@@ -13,11 +13,15 @@ SHELL := /bin/sh
 GRADLEW ?= gradlew.bat
 APP_ID ?= com.factory.samsungremote
 
+# Emulador (ajuste AVD para o nome da sua imagem; veja 'make list-avds')
+EMULATOR ?= "$(LOCALAPPDATA)/Android/Sdk/emulator/emulator.exe"
+AVD ?= Medium_Phone_API_36.1
+
 .PHONY: \
 	help tasks doctor \
 	clean rebuild build \
 	assemble assemble-debug assemble-release \
-	check-device \
+	check-device wait-device list-avds emulator run \
 	install install-debug uninstall-debug \
 	test test-debug test-release \
 	android-test connected-check \
@@ -37,6 +41,10 @@ help: ## Mostra esta ajuda com todos os comandos e explicacoes
 	@echo   assemble-debug         Gera APK debug
 	@echo   assemble-release       Gera APK release
 	@echo   check-device           Verifica se ha ao menos um dispositivo/emulador conectado
+	@echo   wait-device            Aguarda um dispositivo/emulador ficar pronto (boot completo)
+	@echo   list-avds              Lista os emuladores (AVDs) disponiveis
+	@echo   emulator               Sobe o emulador padrao (AVD) em segundo plano
+	@echo   run                    Instala o app debug e ja abre no dispositivo conectado
 	@echo   install                Alias para instalar a versao debug
 	@echo   install-debug          Compila e instala o app no celular/emulador conectado
 	@echo   uninstall-debug        Remove o app debug do dispositivo conectado
@@ -96,6 +104,21 @@ check-device: ## Verifica se ha ao menos um dispositivo/emulador conectado
 		echo "============================================================"; \
 		exit 1; \
 	fi
+
+wait-device: ## Aguarda um dispositivo/emulador ficar pronto (boot completo)
+	@echo "Aguardando dispositivo..."; \
+	adb wait-for-device; \
+	while [ "`adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r'`" != "1" ]; do sleep 2; done; \
+	echo "Dispositivo pronto."; adb devices
+
+list-avds: ## Lista os emuladores (AVDs) disponiveis
+	@$(EMULATOR) -list-avds
+
+emulator: ## Sobe o emulador padrao (AVD) em segundo plano
+	@echo "Subindo emulador $(AVD)..."; \
+	$(EMULATOR) -avd $(AVD) -netdelay none -netspeed full &
+
+run: install-debug app-start ## Instala o app debug e ja abre no dispositivo conectado
 
 install: install-debug ## Alias para instalar a versao debug
 
