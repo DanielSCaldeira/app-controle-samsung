@@ -35,7 +35,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * @param ssdpFallbackTimeoutMs How long to wait for an SSDP candidate before
  *                              also starting mDNS.
  */
-class DiscoveryService(
+open class DiscoveryService(
     private val ssdpSource: TvCandidateSource,
     private val mdnsSource: TvCandidateSource,
     private val validator: TvCandidateValidator,
@@ -45,7 +45,7 @@ class DiscoveryService(
     /**
      * Starts discovery and emits each [DiscoveredTv] as soon as it is confirmed.
      */
-    fun discover(): Flow<DiscoveredTv> = channelFlow {
+    open fun discover(): Flow<DiscoveredTv> = channelFlow {
         val producer = this
         val seenIds = Collections.synchronizedSet(HashSet<String>())
         val ssdpProducedCandidate = AtomicBoolean(false)

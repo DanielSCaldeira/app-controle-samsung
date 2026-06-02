@@ -1,3 +1,9 @@
 <resources>
     <string name="app_name">Samsung Remote</string>
+
+    <!-- Discovery screen -->
+    <string name="discovery_title">Choose a TV</string>
+    <string name="discovery_scanning">Searching for TVs…</string>
+    <string name="discovery_empty">No TVs found on your network</string>
+    <string name="discovery_retry">Scan again</string>
 </resources>
