@@ -4,9 +4,16 @@ import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
 import android.net.wifi.WifiManager
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
+import java.util.Collections
+import kotlin.coroutines.resume
 
 /**
  * [TvCandidateSource] that finds TVs via **mDNS / DNS-SD**, using Android's
@@ -23,6 +30,12 @@ import kotlinx.coroutines.flow.callbackFlow
  * Why more than one type: recent Samsung TVs (e.g. 2024 Q60D-class) no longer
  * advertise `_samsungmsf._tcp` but *do* advertise `_airplay._tcp` (TXT
  * `manufacturer=Samsung`). Browsing both is what makes those sets discoverable.
+ *
+ * **Resolution is serialized.** On Android ≤13 [NsdManager.resolveService]
+ * handles a single resolve at a time; firing one while another is in flight
+ * fails with `FAILURE_ALREADY_ACTIVE`. With two browses running, concurrent
+ * resolves would silently drop the TV. Found services are therefore queued and
+ * resolved one-by-one (with a timeout and a short retry on contention).
  *
  * mDNS browsing is continuous: the returned flow stays active until its
  * collector is cancelled, at which point every browse is stopped via
@@ -54,23 +67,26 @@ class MdnsCandidateSource(
 
         val nsdManager = context.getSystemService(Context.NSD_SERVICE) as NsdManager
 
-        fun resolve(serviceInfo: NsdServiceInfo) {
-            // A fresh ResolveListener per call: NsdManager rejects a listener
-            // that is already in use by an in-flight resolve.
-            nsdManager.resolveService(serviceInfo, object : NsdManager.ResolveListener {
-                override fun onServiceResolved(resolved: NsdServiceInfo) {
-                    resolved.host?.hostAddress?.let { trySend(it) }
-                }
+        // Queue of found services awaiting resolution, drained sequentially.
+        val toResolve = Channel<NsdServiceInfo>(Channel.UNLIMITED)
+        val seen = Collections.synchronizedSet(HashSet<String>())
 
-                override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) = Unit
-            })
+        // Single consumer: one resolve at a time, so we never trip ALREADY_ACTIVE.
+        launch {
+            for (info in toResolve) {
+                resolveHost(nsdManager, info)?.let { trySend(it) }
+            }
         }
 
-        // One DiscoveryListener per service type, all feeding this flow. A type
-        // that fails to start is skipped (not fatal) so the others keep running.
+        // One DiscoveryListener per service type, all enqueuing to the resolver.
+        // A type that fails to start is skipped (not fatal) so others keep going.
         val listeners = serviceTypes.map { type ->
             val listener = object : NsdManager.DiscoveryListener {
-                override fun onServiceFound(serviceInfo: NsdServiceInfo) = resolve(serviceInfo)
+                override fun onServiceFound(serviceInfo: NsdServiceInfo) {
+                    val key = "${serviceInfo.serviceType}/${serviceInfo.serviceName}"
+                    if (seen.add(key)) toResolve.trySend(serviceInfo)
+                }
+
                 override fun onServiceLost(serviceInfo: NsdServiceInfo) = Unit
                 override fun onDiscoveryStarted(serviceType: String) = Unit
                 override fun onDiscoveryStopped(serviceType: String) = Unit
@@ -82,6 +98,7 @@ class MdnsCandidateSource(
         }
 
         awaitClose {
+            toResolve.close()
             listeners.forEach { listener ->
                 try {
                     nsdManager.stopServiceDiscovery(listener)
@@ -92,6 +109,41 @@ class MdnsCandidateSource(
             if (multicastLock.isHeld) multicastLock.release()
         }
     }
+
+    /**
+     * Resolves one service to its host address, retrying briefly while
+     * [NsdManager] is busy with another resolve. Returns `null` on hard failure
+     * or timeout rather than throwing, so a single bad service never stalls the
+     * queue.
+     */
+    private suspend fun resolveHost(nsdManager: NsdManager, info: NsdServiceInfo): String? {
+        repeat(MAX_RESOLVE_ATTEMPTS) { attempt ->
+            val result = withTimeoutOrNull(RESOLVE_TIMEOUT_MS) {
+                suspendCancellableCoroutine { cont ->
+                    nsdManager.resolveService(info, object : NsdManager.ResolveListener {
+                        override fun onServiceResolved(resolved: NsdServiceInfo) {
+                            if (cont.isActive) cont.resume(Result.success(resolved.host?.hostAddress))
+                        }
+
+                        override fun onResolveFailed(serviceInfo: NsdServiceInfo, errorCode: Int) {
+                            if (cont.isActive) cont.resume(Result.failure(ResolveError(errorCode)))
+                        }
+                    })
+                }
+            }
+            when {
+                result == null -> return null // timed out
+                result.isSuccess -> return result.getOrNull()
+                // Only ALREADY_ACTIVE is worth retrying; other failures are terminal.
+                (result.exceptionOrNull() as? ResolveError)?.code != NsdManager.FAILURE_ALREADY_ACTIVE ->
+                    return null
+                else -> if (attempt < MAX_RESOLVE_ATTEMPTS - 1) delay(RESOLVE_RETRY_DELAY_MS)
+            }
+        }
+        return null
+    }
+
+    private class ResolveError(val code: Int) : Exception()
 
     companion object {
         /** DNS-SD service type advertised by Samsung's Multiscreen Framework. */
@@ -108,5 +160,9 @@ class MdnsCandidateSource(
 
         /** Tag for the Wi-Fi [WifiManager.MulticastLock] held during mDNS browsing. */
         private const val MULTICAST_LOCK_TAG: String = "samsung-remote-mdns"
+
+        private const val MAX_RESOLVE_ATTEMPTS: Int = 3
+        private const val RESOLVE_TIMEOUT_MS: Long = 4000L
+        private const val RESOLVE_RETRY_DELAY_MS: Long = 250L
     }
 }
