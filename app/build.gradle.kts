@@ -104,4 +104,7 @@ dependencies {
     androidTestImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.room.testing)
     androidTestImplementation(platform(libs.androidx.compose.bom))
+    // Compose UI testing (DiscoveryScreenTest) — instrumented, device/CI only.
+    androidTestImplementation(libs.androidx.compose.ui.test.junit4)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
