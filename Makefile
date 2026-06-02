@@ -10,7 +10,7 @@
 
 SHELL := /bin/sh
 
-GRADLEW ?= ./gradlew.bat
+GRADLEW ?= gradlew.bat
 APP_ID ?= com.factory.samsungremote
 
 .PHONY: \
