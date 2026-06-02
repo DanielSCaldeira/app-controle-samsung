@@ -42,6 +42,18 @@ android {
     buildFeatures {
         compose = true
     }
+
+    // Expose the exported Room schemas to instrumented tests so migrations can
+    // be validated with MigrationTestHelper.
+    sourceSets {
+        getByName("androidTest").assets.srcDir("$projectDir/schemas")
+    }
+}
+
+// Persist exported Room schemas under app/schemas for version control and
+// migration testing.
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 dependencies {
@@ -83,5 +95,7 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+    androidTestImplementation(libs.kotlinx.coroutines.test)
+    androidTestImplementation(libs.room.testing)
     androidTestImplementation(platform(libs.androidx.compose.bom))
 }
