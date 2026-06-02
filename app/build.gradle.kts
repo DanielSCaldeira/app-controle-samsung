@@ -96,6 +96,9 @@ dependencies {
     // Real org.json for JVM unit tests (the android.jar stub throws "not mocked"),
     // so TizenProtocol's JSON parsing runs under PairingManager unit tests.
     testImplementation(libs.org.json)
+    // MockWebServer stands in for a real TV in RemoteSession unit tests
+    // (WebSocket upgrade, scripted frames, connection drops).
+    testImplementation(libs.okhttp.mockwebserver)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.kotlinx.coroutines.test)
