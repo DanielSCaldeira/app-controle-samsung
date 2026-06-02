@@ -61,6 +61,13 @@ class RemoteScreenTest {
         RemoteTestTags.FF to "KEY_FF",
     )
 
+    /**
+     * The numeric-keypad controls added by task f7ed960d: each digit's stable
+     * test tag ([RemoteTestTags.digit]) paired with the `KEY_<n>` code it emits.
+     */
+    private val digitControls: List<Pair<String, String>> =
+        (0..9).map { RemoteTestTags.digit(it) to "KEY_$it" }
+
     @Test
     fun tappingEachControl_firesMatchingPressKeyIntent() {
         val emitted = mutableListOf<RemoteIntent>()
@@ -151,5 +158,40 @@ class RemoteScreenTest {
         // REW / PLAY / PAUSE / STOP / FF — five distinct keys, none hard-coded to another.
         val codes = emitted.filterIsInstance<RemoteIntent.PressKey>().map { it.key.code }
         assertEquals(listOf("KEY_REW", "KEY_PLAY", "KEY_PAUSE", "KEY_STOP", "KEY_FF"), codes)
+    }
+
+    @Test
+    fun tappingEachDigit_firesItsRemoteKey() {
+        val emitted = mutableListOf<RemoteIntent>()
+        composeRule.setContent {
+            RemoteScreen(onIntent = { emitted += it; true })
+        }
+
+        // Tapping each digit (0..9) fires the matching KEY_<n> on the fake callback.
+        digitControls.forEach { (tag, expectedCode) ->
+            emitted.clear()
+            composeRule.onNodeWithTag(tag).assertIsDisplayed()
+            composeRule.onNodeWithTag(tag).performClick()
+
+            assertEquals("digit $tag should emit one intent", 1, emitted.size)
+            assertEquals(
+                "digit $tag should emit its PressKey",
+                RemoteIntent.PressKey(RemoteKeyCatalog.findByCode(expectedCode)!!),
+                emitted.single(),
+            )
+        }
+    }
+
+    @Test
+    fun everyDigit_meetsMinimumTouchTarget() {
+        composeRule.setContent {
+            RemoteScreen(onIntent = { true })
+        }
+
+        // Material accessibility floor: every digit honors a ≥ 48 dp touch target.
+        digitControls.forEach { (tag, _) ->
+            composeRule.onNodeWithTag(tag).assertWidthIsAtLeast(48.dp)
+            composeRule.onNodeWithTag(tag).assertHeightIsAtLeast(48.dp)
+        }
     }
 }
