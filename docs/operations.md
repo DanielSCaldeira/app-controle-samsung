@@ -50,6 +50,22 @@ São duas, complementares (ver `architecture.md` §13):
    `CommandTransport`) e `make android-test` (instrumentados: `KnownTvDaoTest`,
    Compose UI com `RemoteTestTags`, acessibilidade/TalkBack).
 
+### Verificação end-to-end de build e inicialização
+
+`tests/test_app_build_and_launch_e2e.py` é a checagem de fumaça do app inteiro:
+
+- **Rápida (sem device):** confirma que a única activity exportada é a `MainActivity`
+  LAUNCHER e que o host de navegação parte de `Screen.Discovery`.
+- **Lenta (`-m slow`):** roda `./gradlew :app:build` exigindo `BUILD SUCCESSFUL`; e,
+  havendo device/emulador (`adb`) conectado, instala via `:app:installDebug`, lança o
+  app, confirma que a `MainActivity` é a activity resumida, que o processo segue vivo,
+  varre o logcat por `FATAL EXCEPTION` e valida via `uiautomator` que a tela de
+  descoberta (`discovery_title`) foi renderizada. Sem device, esses passos dão `skip`
+  (não falham).
+
+> Rode os testes lentos explicitamente com `pytest -m slow`; o build autoritativo pode
+> levar minutos no primeiro run (download de dependências do Gradle).
+
 ## 4. Usando o app (fluxo do usuário)
 
 1. **Conecte o telefone à mesma rede Wi-Fi da TV.** O app opera 100% na LAN.

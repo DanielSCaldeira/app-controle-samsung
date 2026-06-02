@@ -166,3 +166,33 @@ sido capturado e de a TV/rede permitirem WoL (alguns ambientes bloqueiam broadca
 **Alternativas.** *Não suportar ligar TV desligada* — descartado por quebrar a
 expectativa de um controle completo. *Manter socket sempre aberto* — impossível com a
 TV sem energia.
+
+---
+
+## ADR-0009 — Navegação single-activity com estado selado (Route/Screen)
+
+**Status:** Accepted · 2026-06-02
+
+**Contexto.** O fluxo do app é linear e fechado: Discovery → Pairing → Remote, onde a
+TV escolhida e o token de pareamento precisam ser carregados de uma tela para a
+próxima. Era preciso ligar essas três telas no `MainActivity` sem acoplar a UI a um
+canal lateral de estado e mantendo as telas testáveis isoladamente.
+
+**Decisão.** Adotar host **single-activity** em Compose: o destino atual é uma
+`sealed interface Screen` (`Discovery`, `Pairing(tv)`, `Remote(tv, token)`) guardada em
+`remember { mutableStateOf<Screen> }`, partindo de `Screen.Discovery`. A TV e o token
+viajam dentro do próprio estado de navegação. Cada tela segue o padrão **Route/Screen**:
+um `*Route` stateful (coleta o `StateFlow` do ViewModel via Hilt, expõe callbacks) que
+delega a um `*Screen` stateless. A dependência `navigation-compose` fica disponível no
+catálogo para evolução futura do grafo.
+
+**Consequências.** (+) Estado de navegação tipado e explícito; argumentos (TV/token)
+viajam type-safe sem canal lateral. (+) `*Screen` puros são testáveis em Compose UI
+tests; a inicialização ponto-a-ponta é coberta pela verificação e2e. (−) Um host de
+estado selado feito à mão não traz back stack/deep links — aceitável para o fluxo linear
+atual; migrar para `NavHost` se o grafo crescer.
+
+**Alternativas.** *`NavHost`/rotas string desde já* — adiável: overhead de
+serialização de argumentos e rotas para um fluxo de três telas. *Estado em um ViewModel
+de escopo de activity* — descartado por ser menos explícito que o `Screen` selado e por
+acoplar navegação a um ViewModel compartilhado.

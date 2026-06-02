@@ -33,7 +33,8 @@ de atalho para serviços de streaming.
 
 | Componente | Responsabilidade | Stack |
 |------------|------------------|-------|
-| **UI (Compose)** | Telas: `DiscoveryScreen`, `PairingScreen`, `RemoteScreen` (D-pad, volume, canais, teclado numérico, media transport, entrada de texto, atalhos de apps) | Kotlin, Jetpack Compose, Material 3 |
+| **Navigation host (`MainActivity`)** | Single-activity que hospeda o fluxo Discovery → Pairing → Remote; o destino atual é modelado por uma `sealed interface Screen` que carrega a TV selecionada e o token de pareamento para a próxima tela (ver §14) | Kotlin, Jetpack Compose, navigation-compose |
+| **UI (Compose)** | Pares `*Route` (stateful, observam ViewModel/`StateFlow`) → `*Screen` (stateless, recebem estado + callbacks): `DiscoveryRoute/Screen`, `PairingRoute/Screen`, `RemoteRoute/Screen` (D-pad, volume, canais, teclado numérico, media transport, entrada de texto, atalhos de apps) | Kotlin, Jetpack Compose, Material 3 |
 | **ViewModels** | `DiscoveryViewModel`, `PairingViewModel`, `RemoteViewModel`: estado de tela, mapeiam toques → `RemoteIntent`, expõem `StateFlow` | Kotlin, AndroidX ViewModel, Coroutines/Flow |
 | **DiscoveryService** | Orquestra a descoberta combinando fontes de candidatos e validação | Kotlin, Coroutines |
 | **TvCandidateSource (SSDP/mDNS)** | `SsdpCandidateSource` (multicast UDP) e `MdnsCandidateSource` (NSD) produzem candidatos de TV na LAN | Kotlin, UDP multicast, Android NSD |
@@ -102,12 +103,12 @@ estáticos referenciados pelos comandos.
 ```
 app/
   src/main/java/com/factory/samsungremote/
-    MainActivity.kt              # host Compose + navegação entre telas
+    MainActivity.kt              # host Compose; sealed Screen (Discovery→Pairing→Remote)
     SamsungRemoteApp.kt          # Application com @HiltAndroidApp
     ui/
-      discovery/DiscoveryScreen.kt   # descoberta + entrada manual de IP
-      pairing/PairingScreen.kt       # pareamento (prompt na TV)
-      remote/RemoteScreen.kt         # controle (RemoteTestTags p/ UI tests)
+      discovery/DiscoveryScreen.kt   # DiscoveryRoute (stateful) + DiscoveryScreen; entrada manual de IP
+      pairing/PairingScreen.kt       # PairingRoute (stateful) + PairingScreen; pareamento (prompt na TV)
+      remote/RemoteScreen.kt         # RemoteRoute (stateful) + RemoteScreen; controle (RemoteTestTags p/ UI tests)
       theme/                         # Color, Theme, Type (Material 3)
     viewmodel/
       DiscoveryViewModel.kt
@@ -259,7 +260,46 @@ Há **duas** suítes complementares:
 
 `tests/contracts/tizen_protocol_v2.json` é o contrato golden de fio (§9).
 
+Há ainda uma verificação **end-to-end de build e inicialização**
+(`tests/test_app_build_and_launch_e2e.py`): checagens estruturais rápidas garantem
+que a única activity exportada é a `MainActivity` LAUNCHER e que o host de navegação
+parte de `Screen.Discovery`; testes lentos (marcados `slow`) rodam `:app:build`
+exigindo `BUILD SUCCESSFUL` e, havendo device/emulador, instalam via
+`:app:installDebug`, lançam o app, confirmam que a `MainActivity` é a activity
+resumida, varrem o logcat por `FATAL EXCEPTION` e validam via `uiautomator` que a
+tela de descoberta foi renderizada. Sem device, esses testes dão `skip`.
+
+## 14. Navegação e composição de telas (host)
+
+O app é **single-activity**: `MainActivity` (`@AndroidEntryPoint`) hospeda todo o
+fluxo em Compose. O destino atual é a própria **fonte de verdade de navegação**,
+modelado por uma `sealed interface Screen`:
+
+```
+Screen.Discovery ──onTvSelected(tv)──▶ Screen.Pairing(tv)
+                                            │
+                                  onPaired(token)
+                                            ▼
+                               Screen.Remote(tv, token)
+```
+
+- O estado inicial é `Screen.Discovery` (`remember { mutableStateOf<Screen>(...) }`).
+- A TV escolhida (`DiscoveredTv`) e o token de pareamento são **carregados adiante
+  como parte do estado de navegação** — `Screen.Pairing` leva a `tv`, `Screen.Remote`
+  leva `tv` + `token` — em vez de um canal lateral. `RemoteRoute` replaya o token para
+  abrir a sessão e ligar os controles à TV.
+- **Padrão Route/Screen.** Cada tela é um par: um `*Route` *stateful* (coleta o
+  `StateFlow` do ViewModel via Hilt e expõe callbacks de navegação) que delega a um
+  `*Screen` *stateless* (recebe estado + lambdas), mantendo a UI pura testável em
+  isolamento (Compose UI tests com `RemoteTestTags`). Cada `*Screen` renderiza seu
+  próprio `Scaffold`; o host apenas troca o destino corrente.
+- A dependência `androidx.navigation:navigation-compose` (+ `hilt-navigation-compose`)
+  está disponível no catálogo para evolução do grafo de navegação; o host atual usa um
+  estado selado enxuto, suficiente para o fluxo linear de três telas.
+
 > **Status de implementação (2026-06-02).** Todas as camadas descritas neste documento
-> estão implementadas: descoberta (SSDP+mDNS+REST+reconciliação), pareamento com TLS
-> LAN, sessão WebSocket com reconexão, protocolo Tizen, catálogos completos de
-> teclas/atalhos, Wake-on-LAN, persistência cifrada e as três telas Compose.
+> estão implementadas e ligadas de ponta a ponta: descoberta (SSDP+mDNS+REST+
+> reconciliação), pareamento com TLS LAN, sessão WebSocket com reconexão, protocolo
+> Tizen, catálogos completos de teclas/atalhos, Wake-on-LAN, persistência cifrada e o
+> fluxo de navegação Discovery → Pairing → Remote (§14) ligado no `MainActivity` e
+> coberto pela verificação e2e de build/inicialização.
