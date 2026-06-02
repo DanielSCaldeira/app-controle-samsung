@@ -3,6 +3,7 @@ package com.factory.samsungremote.network.discovery
 import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
+import android.net.wifi.WifiManager
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -35,6 +36,16 @@ class MdnsCandidateSource(
 ) : TvCandidateSource {
 
     override fun candidates(): Flow<String> = callbackFlow {
+        // Android drops inbound multicast (incl. mDNS at 224.0.0.251) at the
+        // Wi-Fi driver unless a MulticastLock is held. Without this, NsdManager
+        // browses but never sees the TV's `_samsungmsf._tcp` announcement.
+        val wifiManager = context.applicationContext
+            .getSystemService(Context.WIFI_SERVICE) as WifiManager
+        val multicastLock = wifiManager.createMulticastLock(MULTICAST_LOCK_TAG).apply {
+            setReferenceCounted(false)
+            acquire()
+        }
+
         val nsdManager = context.getSystemService(Context.NSD_SERVICE) as NsdManager
 
         fun resolve(serviceInfo: NsdServiceInfo) {
@@ -68,11 +79,15 @@ class MdnsCandidateSource(
             } catch (_: IllegalArgumentException) {
                 // Listener already unregistered (e.g. discovery never started).
             }
+            if (multicastLock.isHeld) multicastLock.release()
         }
     }
 
     companion object {
         /** DNS-SD service type advertised by Samsung's Multiscreen Framework. */
         const val SAMSUNG_SERVICE_TYPE: String = "_samsungmsf._tcp."
+
+        /** Tag for the Wi-Fi [WifiManager.MulticastLock] held during mDNS browsing. */
+        private const val MULTICAST_LOCK_TAG: String = "samsung-remote-mdns"
     }
 }

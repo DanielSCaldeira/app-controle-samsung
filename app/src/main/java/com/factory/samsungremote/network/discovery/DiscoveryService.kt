@@ -14,9 +14,13 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * Strategy (ADR-0004):
  *  1. **SSDP first** — query the LAN via multicast UDP ([ssdpSource]).
- *  2. **mDNS fallback** — if SSDP yields no candidate within
- *     [ssdpFallbackTimeoutMs] (common when multicast SSDP is blocked by the
- *     router/AP), also start the mDNS [mdnsSource].
+ *  2. **mDNS fallback** — if SSDP has not *confirmed a TV* within
+ *     [ssdpFallbackTimeoutMs], also start the mDNS [mdnsSource]. Modern Samsung
+ *     TVs (Tizen) frequently drop the UPnP/SSDP responder and are only
+ *     advertised over mDNS (`_samsungmsf._tcp`), so the fallback must trigger
+ *     whenever no TV was confirmed — *not* merely when SSDP saw no candidate.
+ *     Otherwise any unrelated UPnP device on the LAN (router, printer,
+ *     Chromecast) answering `ssdp:all` would suppress mDNS and hide the TV.
  *  3. Every candidate host from either source is confirmed against the TV's
  *     `GET /api/v2/` endpoint by [validator]; only real Samsung TVs are emitted.
  *
@@ -48,25 +52,28 @@ open class DiscoveryService(
     open fun discover(): Flow<DiscoveredTv> = channelFlow {
         val producer = this
         val seenIds = Collections.synchronizedSet(HashSet<String>())
-        val ssdpProducedCandidate = AtomicBoolean(false)
+        val confirmedTv = AtomicBoolean(false)
 
         // Validate a candidate off the collection path so one slow host does not
-        // stall the others; emit it only once (by id) across all sources.
+        // stall the others; emit it only once (by id) across all sources. A
+        // confirmed TV (validator returned non-null) flips [confirmedTv] so the
+        // mDNS fallback can tell "found a real TV" from "saw some UPnP device".
         fun validate(host: String) = producer.launch {
             val tv = validator.validate(host) ?: return@launch
+            confirmedTv.set(true)
             if (seenIds.add(tv.id)) producer.send(tv)
         }
 
         val ssdpJob = launch {
-            ssdpSource.candidates().collect { host ->
-                ssdpProducedCandidate.set(true)
-                validate(host)
-            }
+            ssdpSource.candidates().collect { host -> validate(host) }
         }
 
         val mdnsJob = launch {
             delay(ssdpFallbackTimeoutMs)
-            if (!ssdpProducedCandidate.get()) {
+            // Fall back to mDNS unless SSDP already confirmed an actual TV.
+            // Gating on confirmation (not on raw candidates) is what lets us
+            // find mDNS-only TVs on a LAN where other devices answer SSDP.
+            if (!confirmedTv.get()) {
                 mdnsSource.candidates().collect { host -> validate(host) }
             }
         }
