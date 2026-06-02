@@ -43,6 +43,11 @@ object RemoteTestTags {
     const val HOME = "remote_home"
     const val MENU = "remote_menu"
     const val POWER = "remote_power"
+    const val VOL_UP = "remote_vol_up"
+    const val VOL_DOWN = "remote_vol_down"
+    const val MUTE = "remote_mute"
+    const val CH_UP = "remote_ch_up"
+    const val CH_DOWN = "remote_ch_down"
 }
 
 /**
@@ -68,6 +73,11 @@ private val KeyReturn = key("KEY_RETURN")
 private val KeyHome = key("KEY_HOME")
 private val KeyMenu = key("KEY_MENU")
 private val KeyPower = key("KEY_POWER")
+private val KeyVolUp = key("KEY_VOLUP")
+private val KeyVolDown = key("KEY_VOLDOWN")
+private val KeyMute = key("KEY_MUTE")
+private val KeyChUp = key("KEY_CHUP")
+private val KeyChDown = key("KEY_CHDOWN")
 
 /**
  * Remote-control entry point: binds the [RemoteViewModel] to the stateless
@@ -93,8 +103,9 @@ fun RemoteRoute(
 
 /**
  * Stateless remote-control screen: renders the D-pad (up/down/left/right + OK),
- * the RETURN / HOME / MENU navigation keys and a POWER toggle, reporting every
- * press as a [RemoteIntent.PressKey] through [onIntent].
+ * the RETURN / HOME / MENU navigation keys, the volume (VOL- / MUTE / VOL+) and
+ * channel (CH- / CH+) controls and a POWER toggle, reporting every press as a
+ * [RemoteIntent.PressKey] through [onIntent].
  *
  * Holding no state of its own keeps it trivially previewable and testable: a
  * test can pass a recording `onIntent` and assert that tapping each control
@@ -141,6 +152,7 @@ fun RemoteScreen(
         ) {
             DPad(onPress = press)
             NavRow(onPress = press)
+            VolumeChannelRow(onPress = press)
         }
     }
 }
@@ -214,6 +226,49 @@ private fun NavRow(
             label = stringResource(R.string.remote_menu),
             tag = RemoteTestTags.MENU,
             onClick = { onPress(KeyMenu) },
+        )
+    }
+}
+
+/**
+ * Volume and channel controls laid out in a single row beneath the navigation
+ * keys: VOL- / MUTE / VOL+ followed by CH- / CH+. Each press emits the matching
+ * [RemoteKey] (`KEY_VOLDOWN`, `KEY_MUTE`, `KEY_VOLUP`, `KEY_CHDOWN`, `KEY_CHUP`).
+ */
+@Composable
+private fun VolumeChannelRow(
+    onPress: (RemoteKey) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        NavButton(
+            label = stringResource(R.string.remote_vol_down),
+            tag = RemoteTestTags.VOL_DOWN,
+            onClick = { onPress(KeyVolDown) },
+        )
+        NavButton(
+            label = stringResource(R.string.remote_mute),
+            tag = RemoteTestTags.MUTE,
+            onClick = { onPress(KeyMute) },
+        )
+        NavButton(
+            label = stringResource(R.string.remote_vol_up),
+            tag = RemoteTestTags.VOL_UP,
+            onClick = { onPress(KeyVolUp) },
+        )
+        NavButton(
+            label = stringResource(R.string.remote_ch_down),
+            tag = RemoteTestTags.CH_DOWN,
+            onClick = { onPress(KeyChDown) },
+        )
+        NavButton(
+            label = stringResource(R.string.remote_ch_up),
+            tag = RemoteTestTags.CH_UP,
+            onClick = { onPress(KeyChUp) },
         )
     }
 }

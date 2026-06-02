@@ -28,4 +28,9 @@
     <string name="remote_home">Home</string>
     <string name="remote_menu">Menu</string>
     <string name="remote_power">Power</string>
+    <string name="remote_vol_up">VOL+</string>
+    <string name="remote_vol_down">VOL-</string>
+    <string name="remote_mute">Mute</string>
+    <string name="remote_ch_up">CH+</string>
+    <string name="remote_ch_down">CH-</string>
 </resources>
