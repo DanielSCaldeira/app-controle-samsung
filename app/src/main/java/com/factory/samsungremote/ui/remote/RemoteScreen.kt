@@ -20,6 +20,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,6 +40,7 @@ import com.factory.samsungremote.data.registry.AppShortcut
 import com.factory.samsungremote.data.registry.AppShortcutCatalog
 import com.factory.samsungremote.data.registry.RemoteKey
 import com.factory.samsungremote.data.registry.RemoteKeyCatalog
+import com.factory.samsungremote.network.discovery.DiscoveredTv
 import com.factory.samsungremote.viewmodel.RemoteIntent
 import com.factory.samsungremote.viewmodel.RemoteViewModel
 
@@ -148,17 +150,31 @@ private val AppYouTube = appShortcut("111299001912")
 
 /**
  * Remote-control entry point: binds the [RemoteViewModel] to the stateless
- * [RemoteScreen].
+ * [RemoteScreen] and opens the control connection to the chosen TV.
+ *
+ * On entry (and after process recreation) it replays the pairing [token] to
+ * [RemoteViewModel.connect] for [tv], so the session connects to an authorized
+ * device and the controls' intents reach an open socket. Both inputs are carried
+ * here by the host's navigation from discovery → pairing → remote.
  *
  * Kept thin and Hilt-aware so it stays out of the UI test path — tests drive
  * [RemoteScreen] directly with a recording `onIntent` callback (no ViewModel/
  * Hilt/session involved), mirroring the discovery/pairing screens.
+ *
+ * @param tv    The TV that was discovered and paired with; the session connects here.
+ * @param token Authorization token returned by pairing, replayed so an already
+ *              authorized device is not re-prompted; `null` when unknown.
  */
 @Composable
 fun RemoteRoute(
+    tv: DiscoveredTv,
+    token: String?,
     modifier: Modifier = Modifier,
     viewModel: RemoteViewModel = hiltViewModel(),
 ) {
+    // Open (or re-target) the connection for the paired TV, replaying the token.
+    LaunchedEffect(tv.id, token) { viewModel.connect(tv, token) }
+
     // Collected so future state-driven UI (connected/reconnecting) can react; the
     // controls themselves are stateless and only emit intents.
     val connectionState by viewModel.connectionState.collectAsState()
