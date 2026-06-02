@@ -33,4 +33,9 @@
     <string name="remote_mute">Mute</string>
     <string name="remote_ch_up">CH+</string>
     <string name="remote_ch_down">CH-</string>
+    <string name="remote_rew">⏪</string>
+    <string name="remote_play">▶</string>
+    <string name="remote_pause">⏸</string>
+    <string name="remote_stop">⏹</string>
+    <string name="remote_ff">⏩</string>
 </resources>

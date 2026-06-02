@@ -48,6 +48,11 @@ object RemoteTestTags {
     const val MUTE = "remote_mute"
     const val CH_UP = "remote_ch_up"
     const val CH_DOWN = "remote_ch_down"
+    const val PLAY = "remote_play"
+    const val PAUSE = "remote_pause"
+    const val STOP = "remote_stop"
+    const val REW = "remote_rew"
+    const val FF = "remote_ff"
 }
 
 /**
@@ -78,6 +83,11 @@ private val KeyVolDown = key("KEY_VOLDOWN")
 private val KeyMute = key("KEY_MUTE")
 private val KeyChUp = key("KEY_CHUP")
 private val KeyChDown = key("KEY_CHDOWN")
+private val KeyPlay = key("KEY_PLAY")
+private val KeyPause = key("KEY_PAUSE")
+private val KeyStop = key("KEY_STOP")
+private val KeyRew = key("KEY_REW")
+private val KeyFf = key("KEY_FF")
 
 /**
  * Remote-control entry point: binds the [RemoteViewModel] to the stateless
@@ -104,7 +114,8 @@ fun RemoteRoute(
 /**
  * Stateless remote-control screen: renders the D-pad (up/down/left/right + OK),
  * the RETURN / HOME / MENU navigation keys, the volume (VOL- / MUTE / VOL+) and
- * channel (CH- / CH+) controls and a POWER toggle, reporting every press as a
+ * channel (CH- / CH+) controls, the media transport bar (REW / PLAY / PAUSE /
+ * STOP / FF) and a POWER toggle, reporting every press as a
  * [RemoteIntent.PressKey] through [onIntent].
  *
  * Holding no state of its own keeps it trivially previewable and testable: a
@@ -153,6 +164,7 @@ fun RemoteScreen(
             DPad(onPress = press)
             NavRow(onPress = press)
             VolumeChannelRow(onPress = press)
+            MediaRow(onPress = press)
         }
     }
 }
@@ -269,6 +281,49 @@ private fun VolumeChannelRow(
             label = stringResource(R.string.remote_ch_up),
             tag = RemoteTestTags.CH_UP,
             onClick = { onPress(KeyChUp) },
+        )
+    }
+}
+
+/**
+ * Media transport bar laid out in a single row beneath the volume/channel
+ * controls: REW / PLAY / PAUSE / STOP / FF. Each press emits the matching
+ * [RemoteKey] (`KEY_REW`, `KEY_PLAY`, `KEY_PAUSE`, `KEY_STOP`, `KEY_FF`).
+ */
+@Composable
+private fun MediaRow(
+    onPress: (RemoteKey) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        NavButton(
+            label = stringResource(R.string.remote_rew),
+            tag = RemoteTestTags.REW,
+            onClick = { onPress(KeyRew) },
+        )
+        NavButton(
+            label = stringResource(R.string.remote_play),
+            tag = RemoteTestTags.PLAY,
+            onClick = { onPress(KeyPlay) },
+        )
+        NavButton(
+            label = stringResource(R.string.remote_pause),
+            tag = RemoteTestTags.PAUSE,
+            onClick = { onPress(KeyPause) },
+        )
+        NavButton(
+            label = stringResource(R.string.remote_stop),
+            tag = RemoteTestTags.STOP,
+            onClick = { onPress(KeyStop) },
+        )
+        NavButton(
+            label = stringResource(R.string.remote_ff),
+            tag = RemoteTestTags.FF,
+            onClick = { onPress(KeyFf) },
         )
     }
 }
