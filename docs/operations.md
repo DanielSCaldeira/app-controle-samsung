@@ -25,7 +25,8 @@ Configurações locais ficam em `local.properties` (caminho do SDK) e
 | `make doctor` | Checa Java, `adb` e dispositivos conectados |
 | `make build` | Compila e roda as verificações do módulo `app` |
 | `make assemble-debug` | Gera o APK debug |
-| `make install-debug` (ou `make install`) | Compila e instala no device/emulador conectado |
+| `make check-device` | Verifica se há ao menos um device/emulador com status `device`; se não, imprime o passo a passo e falha |
+| `make install-debug` (ou `make install`) | Pré-checa o device (`check-device`) e então compila e instala no aparelho conectado |
 | `make test` | Testes unitários JVM de todas as variantes |
 | `make test-debug` | Testes unitários da variante debug |
 | `make android-test` | Testes instrumentados (Room + Compose UI) em device conectado |
@@ -91,11 +92,13 @@ São duas, complementares (ver `architecture.md` §13):
 ## 6. Instalando em um celular físico (device real)
 
 `make install-debug` **compila e instala** o APK debug no aparelho conectado.
-O build em si **não exige** device algum — se ele falhar com
-`com.android.builder.testing.api.DeviceException: No connected devices!`, o
-**APK foi gerado com sucesso**; o erro indica apenas que **não há device nem
-emulador conectado** no momento da instalação. Conecte um aparelho (ou suba um
-emulador) e rode de novo.
+Antes de qualquer build, ele roda a **pré-checagem `check-device`**: se nenhum
+device/emulador estiver com status `device`, o alvo **falha cedo** (exit 1) e
+imprime um passo a passo de como conectar o celular (ativar Depuração USB,
+autorizar o prompt RSA, confirmar com `make adb-devices`/`make doctor` e tentar
+de novo) — assim você não precisa mais interpretar o
+`com.android.builder.testing.api.DeviceException: No connected devices!` cru do
+Gradle. Para apenas gerar o APK sem device, use `make assemble-debug`.
 
 Passo a passo para um celular Samsung/Android real:
 
@@ -143,7 +146,8 @@ Passo a passo para um celular Samsung/Android real:
 
 | Sintoma | Causa provável | O que fazer |
 |---------|----------------|-------------|
-| `make install-debug` falha com `DeviceException: No connected devices!` | Nenhum celular/emulador conectado (o build em si funcionou) | Conecte um aparelho e verifique com `make doctor` ou `make adb-devices` (status `device`); veja §6 para habilitar Depuração USB / pareamento sem fio; então rode `make install-debug` |
+| `make install-debug` aborta com "Nenhum dispositivo/emulador conectado foi detectado" | Pré-checagem `check-device` não encontrou device com status `device` (build nem chega a rodar) | Siga o passo a passo impresso: ative Depuração USB, autorize o prompt RSA, confirme com `make adb-devices`/`make doctor` (status `device`) — veja §6 — e rode `make install-debug` de novo |
+| `make install-debug` falha com `DeviceException: No connected devices!` | Versão antiga sem a pré-checagem, ou device caiu durante o build | Conecte um aparelho e verifique com `make doctor` ou `make adb-devices` (status `device`); veja §6 para habilitar Depuração USB / pareamento sem fio; então rode `make install-debug` |
 | Aparelho aparece como `unauthorized` em `make adb-devices` | Prompt de autorização RSA não aceito no celular | Reconecte o cabo e toque **Permitir** no prompt "Permitir depuração USB?" (marque *Sempre permitir*); veja §6 |
 | Nenhuma TV aparece na descoberta | Multicast (SSDP/mDNS) bloqueado pela rede; telefone em outra VLAN/Wi-Fi de visitantes | Use entrada manual de IP; garanta mesma rede; verifique `CHANGE_WIFI_MULTICAST_STATE` |
 | Pareamento falha / não aparece prompt na TV | Token expirado/revogado; TLS auto-assinado rejeitado | Re-parear; o `LanTrustManager` aceita o cert da TV só na sessão LAN |
