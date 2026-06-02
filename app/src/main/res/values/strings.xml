@@ -6,6 +6,11 @@
     <string name="discovery_scanning">Searching for TVs…</string>
     <string name="discovery_empty">No TVs found on your network</string>
     <string name="discovery_retry">Scan again</string>
+    <!-- Manual IP entry (fallback when SSDP/mDNS discovery is blocked) -->
+    <string name="discovery_manual_hint">Can\'t find your TV? Enter its IP address manually.</string>
+    <string name="discovery_manual_label">TV IP address</string>
+    <string name="discovery_manual_connect">Connect</string>
+    <string name="discovery_manual_invalid">Enter a valid IP address (e.g. 192.168.0.10)</string>
 
     <!-- Pairing screen -->
     <string name="pairing_title">Pairing</string>
