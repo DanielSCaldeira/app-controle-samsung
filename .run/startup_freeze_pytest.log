@@ -1,0 +1,28 @@
+============================= test session starts =============================
+platform win32 -- Python 3.12.10, pytest-9.0.3, pluggy-1.6.0 -- D:\git\autonomous-factory\.venv\Scripts\python.exe
+rootdir: D:\git\af-workspaces\7bed6068-8252-4e4c-8ae9-1fe65b40df46
+plugins: anyio-4.13.0, asyncio-1.4.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 9 items
+
+tests/test_startup_freeze_fix.py::test_sources_present PASSED            [ 11%]
+tests/test_startup_freeze_fix.py::test_theme_uses_dynamic_color_only_on_supported_sdk PASSED [ 22%]
+tests/test_startup_freeze_fix.py::test_theme_dynamic_color_is_failure_tolerant PASSED [ 33%]
+tests/test_startup_freeze_fix.py::test_theme_still_offers_static_fallback_schemes PASSED [ 44%]
+tests/test_startup_freeze_fix.py::test_main_activity_startup_contract PASSED [ 55%]
+tests/test_startup_freeze_fix.py::test_app_entry_is_hilt_application PASSED [ 66%]
+tests/test_startup_freeze_fix.py::test_discovery_scan_runs_off_main_thread PASSED [ 77%]
+tests/test_startup_freeze_fix.py::test_assemble_debug_and_unit_tests_succeed PASSED [ 88%]
+tests/test_startup_freeze_fix.py::test_cold_start_renders_discovery_without_freeze_or_crash PASSED [100%]
+
+============================== warnings summary ===============================
+tests\test_startup_freeze_fix.py:234
+  D:\git\af-workspaces\7bed6068-8252-4e4c-8ae9-1fe65b40df46\tests\test_startup_freeze_fix.py:234: PytestUnknownMarkWarning: Unknown pytest.mark.slow - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.slow
+
+tests\test_startup_freeze_fix.py:253
+  D:\git\af-workspaces\7bed6068-8252-4e4c-8ae9-1fe65b40df46\tests\test_startup_freeze_fix.py:253: PytestUnknownMarkWarning: Unknown pytest.mark.slow - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.slow
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================= 9 passed, 2 warnings in 34.19s ========================
