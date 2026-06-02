@@ -16,4 +16,16 @@
     <string name="pairing_error_no_token">Pairing didn\'t complete. Please try again.</string>
     <string name="pairing_error_generic">Pairing failed. Please try again.</string>
     <string name="pairing_retry">Try again</string>
+
+    <!-- Remote control screen -->
+    <string name="remote_title">Remote</string>
+    <string name="remote_dpad_up">Up</string>
+    <string name="remote_dpad_down">Down</string>
+    <string name="remote_dpad_left">Left</string>
+    <string name="remote_dpad_right">Right</string>
+    <string name="remote_ok">OK</string>
+    <string name="remote_return">Return</string>
+    <string name="remote_home">Home</string>
+    <string name="remote_menu">Menu</string>
+    <string name="remote_power">Power</string>
 </resources>
