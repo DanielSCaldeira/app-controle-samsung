@@ -118,3 +118,51 @@ variam entre modelos/firmwares e novos serviços surgem.
 de modelo. (−) Necessário manter o catálogo atualizado.
 
 **Alternativas.** *Hardcode dos atalhos na tela* — descartado por rigidez e duplicação.
+
+---
+
+## ADR-0007 — Contrato de fio versionado + pytest como runner de CI
+
+**Status:** Accepted · 2026-06-02
+
+**Contexto.** O protocolo Tizen não é oficialmente documentado e pode mudar entre
+firmwares; precisamos detectar regressões no formato de fio. Além disso, o runner de
+CI da fábrica é pytest, enquanto o código de produção é Kotlin (depende de `org.json`,
+presente no Android mas ausente num JVM desktop).
+
+**Decisão.** Congelar o formato de fio em um contrato golden versionado
+(`tests/contracts/tizen_protocol_v2.json`) exercido por testes de contrato; manter
+pytest como runner principal, compilando/executando o Kotlin real (com shim de
+`org.json` quando preciso) e fazendo `skip` quando não há toolchain — complementado
+pelos testes nativos `app/src/test` (unitários) e `app/src/androidTest` (Room + Compose).
+
+**Consequências.** (+) Qualquer alteração no formato de fio quebra os testes de
+propósito, forçando uma revisão consciente (nova versão `v3` em vez de editar o golden).
+(+) CI roda em ambientes sem device. (−) Suíte de testes dupla (pytest + Gradle) a
+manter; testes podem dar `skip` silencioso sem toolchain Kotlin.
+
+**Alternativas.** *Só testes nativos Gradle* — descartado por não integrar ao runner
+pytest da fábrica. *Asserts soltos sem golden* — descartado por não detectar mudanças
+sutis de formato.
+
+---
+
+## ADR-0008 — Wake-on-LAN para ligar a TV desligada
+
+**Status:** Accepted · 2026-06-02
+
+**Contexto.** Com a TV totalmente desligada, o WebSocket de controle fica indisponível,
+então o botão Power não a liga (risco já previsto na arquitetura §8).
+
+**Decisão.** Quando um `PressKey(KEY_POWER)` não alcança uma conexão aberta, enviar um
+"magic packet" Wake-on-LAN (UDP broadcast) para o MAC persistido da TV
+(`KnownTv.macAddress`). O `WakeOnLan` separa a construção pura do pacote (`buildMagicPacket`,
+testável) do envio UDP; quando o MAC é desconhecido, é no-op silencioso.
+
+**Consequências.** (+) O botão Power liga a TV mesmo desligada, completando a paridade
+com o controle físico. (+) Lógica pura testável isoladamente. (−) Depende de o MAC ter
+sido capturado e de a TV/rede permitirem WoL (alguns ambientes bloqueiam broadcast).
+
+**Alternativas.** *Não suportar ligar TV desligada* — descartado por quebrar a
+expectativa de um controle completo. *Manter socket sempre aberto* — impossível com a
+TV sem energia.
