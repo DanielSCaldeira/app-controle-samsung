@@ -1,12 +1,15 @@
 package com.factory.samsungremote.di
 
 import android.content.Context
+import com.factory.samsungremote.data.registry.TvRegistry
 import com.factory.samsungremote.network.discovery.DiscoveryService
 import com.factory.samsungremote.network.discovery.MdnsCandidateSource
 import com.factory.samsungremote.network.discovery.RestTvCandidateValidator
 import com.factory.samsungremote.network.discovery.SsdpCandidateSource
 import com.factory.samsungremote.network.discovery.TvCandidateSource
 import com.factory.samsungremote.network.discovery.TvCandidateValidator
+import com.factory.samsungremote.network.discovery.TvReconciler
+import com.factory.samsungremote.network.session.RemoteSession
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -74,5 +77,23 @@ object DiscoveryModule {
         ssdpSource = ssdpSource,
         mdnsSource = mdnsSource,
         validator = validator,
+    )
+
+    /**
+     * Reconciles a stored TV's IP by device id (re-discovery) and reconnects the
+     * session to the current address — the DHCP-lease-churn mitigation
+     * (architecture §8). Wires the discovery pipeline, the registry (token source
+     * + IP sink) and the live session together.
+     */
+    @Provides
+    @Singleton
+    fun provideTvReconciler(
+        discoveryService: DiscoveryService,
+        registry: TvRegistry,
+        session: RemoteSession,
+    ): TvReconciler = TvReconciler(
+        discoveryService = discoveryService,
+        registry = registry,
+        session = session,
     )
 }
