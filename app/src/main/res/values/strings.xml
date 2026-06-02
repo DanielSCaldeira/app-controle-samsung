@@ -38,4 +38,9 @@
     <string name="remote_pause">⏸</string>
     <string name="remote_stop">⏹</string>
     <string name="remote_ff">⏩</string>
+    <!-- Streaming app shortcuts -->
+    <string name="remote_app_netflix">Netflix</string>
+    <string name="remote_app_prime">Prime Video</string>
+    <string name="remote_app_disney">Disney+</string>
+    <string name="remote_app_youtube">YouTube</string>
 </resources>

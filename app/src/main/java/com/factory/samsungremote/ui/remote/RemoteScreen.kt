@@ -27,6 +27,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.factory.samsungremote.R
+import com.factory.samsungremote.data.registry.AppShortcut
+import com.factory.samsungremote.data.registry.AppShortcutCatalog
 import com.factory.samsungremote.data.registry.RemoteKey
 import com.factory.samsungremote.data.registry.RemoteKeyCatalog
 import com.factory.samsungremote.viewmodel.RemoteIntent
@@ -53,6 +55,10 @@ object RemoteTestTags {
     const val STOP = "remote_stop"
     const val REW = "remote_rew"
     const val FF = "remote_ff"
+    const val APP_NETFLIX = "remote_app_netflix"
+    const val APP_PRIME = "remote_app_prime"
+    const val APP_DISNEY = "remote_app_disney"
+    const val APP_YOUTUBE = "remote_app_youtube"
 }
 
 /**
@@ -90,6 +96,30 @@ private val KeyRew = key("KEY_REW")
 private val KeyFf = key("KEY_FF")
 
 /**
+ * Key the streaming shortcuts fall back to when
+ * [com.factory.samsungremote.data.repository.CommandRepository.launchApp] reports
+ * the app did not open (e.g. the deep link is unsupported on this TV):
+ * we drop the user onto the TV Home screen so they can navigate to the app by
+ * key instead of being left with a silent no-op.
+ */
+private val FallbackNavKey = key("KEY_HOME")
+
+/**
+ * The launchable streaming apps this screen exposes as dedicated shortcuts,
+ * resolved once from the static [AppShortcutCatalog] so the UI never hard-codes a
+ * Tizen `appId` and stays in sync with the catalog.
+ */
+private fun appShortcut(appId: String): AppShortcut =
+    requireNotNull(AppShortcutCatalog.findByAppId(appId)) {
+        "Missing app shortcut in catalog: $appId"
+    }
+
+private val AppNetflix = appShortcut("11101200001")
+private val AppPrime = appShortcut("3201910019365")
+private val AppDisney = appShortcut("3201901017640")
+private val AppYouTube = appShortcut("111299001912")
+
+/**
  * Remote-control entry point: binds the [RemoteViewModel] to the stateless
  * [RemoteScreen].
  *
@@ -115,22 +145,37 @@ fun RemoteRoute(
  * Stateless remote-control screen: renders the D-pad (up/down/left/right + OK),
  * the RETURN / HOME / MENU navigation keys, the volume (VOL- / MUTE / VOL+) and
  * channel (CH- / CH+) controls, the media transport bar (REW / PLAY / PAUSE /
- * STOP / FF) and a POWER toggle, reporting every press as a
- * [RemoteIntent.PressKey] through [onIntent].
+ * STOP / FF), the streaming app shortcuts (Netflix / Prime Video / Disney+ /
+ * YouTube) and a POWER toggle, reporting every action as a [RemoteIntent]
+ * through [onIntent].
  *
  * Holding no state of its own keeps it trivially previewable and testable: a
  * test can pass a recording `onIntent` and assert that tapping each control
- * emits the matching key. Every control honors a ≥ 48 dp touch target.
+ * emits the matching intent. Every control honors a ≥ 48 dp touch target.
  *
- * @param onIntent Called with the [RemoteIntent] produced by a control press.
+ * [onIntent] returns whether the resulting frame reached an open connection
+ * (propagated from [com.factory.samsungremote.data.repository.CommandRepository]
+ * via the ViewModel). The streaming shortcuts use this signal: when a
+ * [RemoteIntent.LaunchApp] reports failure, the screen falls back to a
+ * [RemoteIntent.PressKey] on [FallbackNavKey] (Home) so the user can reach the
+ * app by key instead of facing a silent no-op.
+ *
+ * @param onIntent Called with the [RemoteIntent] produced by a control press;
+ *                 returns `true` when the frame reached an open connection.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RemoteScreen(
-    onIntent: (RemoteIntent) -> Unit,
+    onIntent: (RemoteIntent) -> Boolean,
     modifier: Modifier = Modifier,
 ) {
     val press: (RemoteKey) -> Unit = { onIntent(RemoteIntent.PressKey(it)) }
+    val launch: (AppShortcut) -> Unit = { shortcut ->
+        // Fall back to key navigation (Home) when the app fails to launch.
+        if (!onIntent(RemoteIntent.LaunchApp(shortcut.appId))) {
+            onIntent(RemoteIntent.PressKey(FallbackNavKey))
+        }
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -165,6 +210,7 @@ fun RemoteScreen(
             NavRow(onPress = press)
             VolumeChannelRow(onPress = press)
             MediaRow(onPress = press)
+            ShortcutRow(onLaunch = launch)
         }
     }
 }
@@ -328,6 +374,46 @@ private fun MediaRow(
     }
 }
 
+/**
+ * Streaming app shortcuts laid out in a single row beneath the media controls:
+ * Netflix / Prime Video / Disney+ / YouTube. Each press asks [onLaunch] to launch
+ * the matching [AppShortcut] (resolved from [AppShortcutCatalog]); the screen's
+ * `launch` handler routes that to a [RemoteIntent.LaunchApp] and falls back to key
+ * navigation when the app does not open.
+ */
+@Composable
+private fun ShortcutRow(
+    onLaunch: (AppShortcut) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ShortcutButton(
+            label = stringResource(R.string.remote_app_netflix),
+            tag = RemoteTestTags.APP_NETFLIX,
+            onClick = { onLaunch(AppNetflix) },
+        )
+        ShortcutButton(
+            label = stringResource(R.string.remote_app_prime),
+            tag = RemoteTestTags.APP_PRIME,
+            onClick = { onLaunch(AppPrime) },
+        )
+        ShortcutButton(
+            label = stringResource(R.string.remote_app_disney),
+            tag = RemoteTestTags.APP_DISNEY,
+            onClick = { onLaunch(AppDisney) },
+        )
+        ShortcutButton(
+            label = stringResource(R.string.remote_app_youtube),
+            tag = RemoteTestTags.APP_YOUTUBE,
+            onClick = { onLaunch(AppYouTube) },
+        )
+    }
+}
+
 /** A directional (arrow) D-pad button with a ≥ 48 dp touch target. */
 @Composable
 private fun DirButton(
@@ -371,6 +457,24 @@ private fun NavButton(
     modifier: Modifier = Modifier,
 ) {
     OutlinedButton(
+        onClick = onClick,
+        modifier = modifier
+            .sizeIn(minWidth = MinTouchTarget, minHeight = MinTouchTarget)
+            .testTag(tag),
+    ) {
+        Text(label)
+    }
+}
+
+/** A streaming app shortcut button (Netflix / Prime / Disney+ / YouTube). */
+@Composable
+private fun ShortcutButton(
+    label: String,
+    tag: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    FilledTonalButton(
         onClick = onClick,
         modifier = modifier
             .sizeIn(minWidth = MinTouchTarget, minHeight = MinTouchTarget)

@@ -65,7 +65,7 @@ class RemoteScreenTest {
     fun tappingEachControl_firesMatchingPressKeyIntent() {
         val emitted = mutableListOf<RemoteIntent>()
         composeRule.setContent {
-            RemoteScreen(onIntent = { emitted += it })
+            RemoteScreen(onIntent = { emitted += it; true })
         }
 
         controls.forEach { (tag, expectedCode) ->
@@ -87,7 +87,7 @@ class RemoteScreenTest {
     @Test
     fun everyControl_meetsMinimumTouchTarget() {
         composeRule.setContent {
-            RemoteScreen(onIntent = {})
+            RemoteScreen(onIntent = { true })
         }
 
         // Material accessibility floor called out in the acceptance criteria.
@@ -101,7 +101,7 @@ class RemoteScreenTest {
     fun dpadAndOk_emitDistinctKeys() {
         val emitted = mutableListOf<RemoteIntent>()
         composeRule.setContent {
-            RemoteScreen(onIntent = { emitted += it })
+            RemoteScreen(onIntent = { emitted += it; true })
         }
 
         listOf(
@@ -121,7 +121,7 @@ class RemoteScreenTest {
     fun tappingEachMediaButton_firesItsRemoteKey() {
         val emitted = mutableListOf<RemoteIntent>()
         composeRule.setContent {
-            RemoteScreen(onIntent = { emitted += it })
+            RemoteScreen(onIntent = { emitted += it; true })
         }
 
         // Each media-transport button fires the matching RemoteKey on the fake.
@@ -143,7 +143,7 @@ class RemoteScreenTest {
     fun mediaButtons_emitDistinctKeysInBarOrder() {
         val emitted = mutableListOf<RemoteIntent>()
         composeRule.setContent {
-            RemoteScreen(onIntent = { emitted += it })
+            RemoteScreen(onIntent = { emitted += it; true })
         }
 
         mediaControls.forEach { (tag, _) -> composeRule.onNodeWithTag(tag).performClick() }
