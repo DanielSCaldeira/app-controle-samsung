@@ -1,13 +1,17 @@
 package com.factory.samsungremote.viewmodel
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.factory.samsungremote.data.registry.KeyCategory
 import com.factory.samsungremote.data.registry.RemoteKey
 import com.factory.samsungremote.data.repository.CommandRepository
 import com.factory.samsungremote.network.discovery.DiscoveredTv
 import com.factory.samsungremote.network.session.ConnectionState
 import com.factory.samsungremote.network.session.RemoteSession
+import com.factory.samsungremote.network.wol.WakeOnLan
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
@@ -60,12 +64,24 @@ sealed interface RemoteIntent {
  *                          tests can drive it with a recording transport.
  * @param session           The live connection whose [ConnectionState] is exposed
  *                          and whose lifecycle [connect]/[disconnect] delegate to.
+ * @param wakeOnLan         Wake-on-LAN sender used to power on a fully-off TV when
+ *                          a POWER press cannot reach an open connection.
  */
 @HiltViewModel
 class RemoteViewModel @Inject constructor(
     private val commandRepository: CommandRepository,
     private val session: RemoteSession,
+    private val wakeOnLan: WakeOnLan,
 ) : ViewModel() {
+
+    /**
+     * MAC address of the currently targeted TV (from the persisted
+     * [com.factory.samsungremote.data.db.KnownTv.macAddress]), captured on
+     * [connect]. Used to send a Wake-on-LAN magic packet when a POWER press finds
+     * the session offline. `null` when unknown, in which case WoL is skipped.
+     */
+    @Volatile
+    private var macAddress: String? = null
 
     /**
      * Observable connection lifecycle the screen renders directly.
@@ -79,14 +95,38 @@ class RemoteViewModel @Inject constructor(
     /**
      * Routes a touch-derived [intent] to the matching domain action.
      *
+     * When a [RemoteIntent.PressKey] on the POWER key does not reach an open
+     * connection (the TV is off / unreachable), this falls back to a Wake-on-LAN
+     * broadcast to the last-known [macAddress] so the press still turns the TV on.
+     * The WoL send is fire-and-forget on [viewModelScope]; this method still
+     * returns the transport result synchronously.
+     *
      * @return `true` when the resulting frame reached an open connection, `false`
      *         when no socket is currently connected (propagated from the transport
      *         via [CommandRepository]).
      */
-    fun onIntent(intent: RemoteIntent): Boolean = when (intent) {
-        is RemoteIntent.PressKey -> commandRepository.sendKey(intent.key)
-        is RemoteIntent.TypeText -> commandRepository.sendText(intent.text)
-        is RemoteIntent.LaunchApp -> commandRepository.launchApp(intent.appId)
+    fun onIntent(intent: RemoteIntent): Boolean {
+        val reached = when (intent) {
+            is RemoteIntent.PressKey -> commandRepository.sendKey(intent.key)
+            is RemoteIntent.TypeText -> commandRepository.sendText(intent.text)
+            is RemoteIntent.LaunchApp -> commandRepository.launchApp(intent.appId)
+        }
+        if (!reached && intent is RemoteIntent.PressKey &&
+            intent.key.category == KeyCategory.POWER
+        ) {
+            attemptWakeOnLan()
+        }
+        return reached
+    }
+
+    /**
+     * Fires a Wake-on-LAN magic packet to the current TV's [macAddress] when one
+     * is known. No-op (and does not crash the hot control path) when the MAC was
+     * never captured.
+     */
+    private fun attemptWakeOnLan() {
+        val mac = macAddress ?: return
+        viewModelScope.launch { wakeOnLan.wake(mac) }
     }
 
     /** Convenience for the common case: press a single [key]. */
@@ -96,8 +136,16 @@ class RemoteViewModel @Inject constructor(
      * Opens (or re-targets) the control connection to [tv], replaying the pairing
      * [token] so an authorized device is not re-prompted. Observe [connectionState]
      * for progress.
+     *
+     * [macAddress] (from the persisted
+     * [com.factory.samsungremote.data.db.KnownTv.macAddress]) is remembered so a
+     * later POWER press can wake the TV over Wake-on-LAN if it is found powered
+     * off. Pass `null` when the MAC is unknown — WoL is then simply skipped.
      */
-    fun connect(tv: DiscoveredTv, token: String?) = session.connect(tv, token)
+    fun connect(tv: DiscoveredTv, token: String?, macAddress: String? = null) {
+        this.macAddress = macAddress
+        session.connect(tv, token)
+    }
 
     /** Tears the connection down and stops reconnecting. */
     fun disconnect() = session.disconnect()
