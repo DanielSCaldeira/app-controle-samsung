@@ -59,6 +59,16 @@ object RemoteTestTags {
     const val APP_PRIME = "remote_app_prime"
     const val APP_DISNEY = "remote_app_disney"
     const val APP_YOUTUBE = "remote_app_youtube"
+
+    /**
+     * Test tag for numeric-keypad digit [n] (0..9), the control that emits
+     * `KEY_<n>`. Exposed as a function so tests can iterate the ten digits
+     * without ten separate constants.
+     */
+    fun digit(n: Int): String {
+        require(n in 0..9) { "digit must be 0..9: $n" }
+        return "remote_digit_$n"
+    }
 }
 
 /**
@@ -94,6 +104,13 @@ private val KeyPause = key("KEY_PAUSE")
 private val KeyStop = key("KEY_STOP")
 private val KeyRew = key("KEY_REW")
 private val KeyFf = key("KEY_FF")
+
+/**
+ * The numeric keypad keys (`KEY_0`..`KEY_9`), indexed by digit so
+ * `NumericKeys[n]` is the [RemoteKey] for digit `n`. Resolved once from the
+ * static [RemoteKeyCatalog] so the UI never hard-codes a `KEY_<n>` string.
+ */
+private val NumericKeys: List<RemoteKey> = (0..9).map { key("KEY_$it") }
 
 /**
  * Key the streaming shortcuts fall back to when
@@ -144,8 +161,9 @@ fun RemoteRoute(
 /**
  * Stateless remote-control screen: renders the D-pad (up/down/left/right + OK),
  * the RETURN / HOME / MENU navigation keys, the volume (VOL- / MUTE / VOL+) and
- * channel (CH- / CH+) controls, the media transport bar (REW / PLAY / PAUSE /
- * STOP / FF), the streaming app shortcuts (Netflix / Prime Video / Disney+ /
+ * channel (CH- / CH+) controls, the numeric keypad (KEY_0..KEY_9) for direct
+ * channel entry, the media transport bar (REW / PLAY / PAUSE / STOP / FF), the
+ * streaming app shortcuts (Netflix / Prime Video / Disney+ /
  * YouTube) and a POWER toggle, reporting every action as a [RemoteIntent]
  * through [onIntent].
  *
@@ -209,6 +227,7 @@ fun RemoteScreen(
             DPad(onPress = press)
             NavRow(onPress = press)
             VolumeChannelRow(onPress = press)
+            NumericKeypad(onPress = press)
             MediaRow(onPress = press)
             ShortcutRow(onLaunch = launch)
         }
@@ -328,6 +347,43 @@ private fun VolumeChannelRow(
             tag = RemoteTestTags.CH_UP,
             onClick = { onPress(KeyChUp) },
         )
+    }
+}
+
+/**
+ * Numeric keypad (`KEY_0`..`KEY_9`) for direct channel entry, laid out as the
+ * conventional 3×3 grid (1–9) with 0 centered beneath. Each digit press emits
+ * the matching [RemoteKey] (`KEY_<n>`, resolved from [NumericKeys]).
+ */
+@Composable
+private fun NumericKeypad(
+    onPress: (RemoteKey) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        // Phone-keypad order: 1-9 in three rows, then 0 on its own row.
+        listOf(
+            listOf(1, 2, 3),
+            listOf(4, 5, 6),
+            listOf(7, 8, 9),
+            listOf(0),
+        ).forEach { rowDigits ->
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                rowDigits.forEach { digit ->
+                    DigitButton(
+                        digit = digit,
+                        onClick = { onPress(NumericKeys[digit]) },
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -463,6 +519,27 @@ private fun NavButton(
             .testTag(tag),
     ) {
         Text(label)
+    }
+}
+
+/**
+ * A single numeric-keypad button. Labeled with [digit] (0–9) and tagged with
+ * [RemoteTestTags.digit] so tests can locate each digit; honors the ≥ 48 dp
+ * touch target like every other control.
+ */
+@Composable
+private fun DigitButton(
+    digit: Int,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    FilledTonalButton(
+        onClick = onClick,
+        modifier = modifier
+            .sizeIn(minWidth = MinTouchTarget, minHeight = MinTouchTarget)
+            .testTag(RemoteTestTags.digit(digit)),
+    ) {
+        Text(digit.toString())
     }
 }
 
