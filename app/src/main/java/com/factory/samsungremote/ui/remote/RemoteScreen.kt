@@ -4,23 +4,31 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -59,6 +67,8 @@ object RemoteTestTags {
     const val APP_PRIME = "remote_app_prime"
     const val APP_DISNEY = "remote_app_disney"
     const val APP_YOUTUBE = "remote_app_youtube"
+    const val TEXT_INPUT = "remote_text_input"
+    const val TEXT_SEND = "remote_text_send"
 
     /**
      * Test tag for numeric-keypad digit [n] (0..9), the control that emits
@@ -188,6 +198,7 @@ fun RemoteScreen(
     modifier: Modifier = Modifier,
 ) {
     val press: (RemoteKey) -> Unit = { onIntent(RemoteIntent.PressKey(it)) }
+    val type: (String) -> Unit = { text -> onIntent(RemoteIntent.TypeText(text)) }
     val launch: (AppShortcut) -> Unit = { shortcut ->
         // Fall back to key navigation (Home) when the app fails to launch.
         if (!onIntent(RemoteIntent.LaunchApp(shortcut.appId))) {
@@ -226,6 +237,7 @@ fun RemoteScreen(
         ) {
             DPad(onPress = press)
             NavRow(onPress = press)
+            TextEntryRow(onSend = type)
             VolumeChannelRow(onPress = press)
             NumericKeypad(onPress = press)
             MediaRow(onPress = press)
@@ -304,6 +316,59 @@ private fun NavRow(
             tag = RemoteTestTags.MENU,
             onClick = { onPress(KeyMenu) },
         )
+    }
+}
+
+/**
+ * Text-entry control: a single-line field plus a Send button for typing into the
+ * focused field on the TV (e.g. a search box). The field holds its own transient
+ * text via [rememberSaveable] — the only UI state on this otherwise-stateless
+ * screen — so it survives recomposition and configuration changes.
+ *
+ * Submitting (tapping Send or pressing the keyboard's Done/Search action) forwards
+ * the current text to [onSend], which the screen routes to a
+ * [RemoteIntent.TypeText]; the protocol layer Base64-encodes it on the wire. Blank
+ * input is ignored and the field is cleared after a successful send so the next
+ * search starts fresh. Both controls honor the ≥ 48 dp touch target.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TextEntryRow(
+    onSend: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var text by rememberSaveable { mutableStateOf("") }
+    val submit: () -> Unit = {
+        if (text.isNotBlank()) {
+            onSend(text)
+            text = ""
+        }
+    }
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        OutlinedTextField(
+            value = text,
+            onValueChange = { text = it },
+            singleLine = true,
+            label = { Text(stringResource(R.string.remote_text_label)) },
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+            keyboardActions = KeyboardActions(onSend = { submit() }),
+            modifier = Modifier
+                .weight(1f)
+                .sizeIn(minHeight = MinTouchTarget)
+                .testTag(RemoteTestTags.TEXT_INPUT),
+        )
+        Button(
+            onClick = submit,
+            modifier = Modifier
+                .sizeIn(minWidth = MinTouchTarget, minHeight = MinTouchTarget)
+                .testTag(RemoteTestTags.TEXT_SEND),
+        ) {
+            Text(stringResource(R.string.remote_text_send))
+        }
     }
 }
 
