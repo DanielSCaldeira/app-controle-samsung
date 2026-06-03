@@ -2,6 +2,7 @@ package com.factory.samsungremote.ui.remote
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -82,8 +83,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import kotlinx.coroutines.delay
 import com.factory.samsungremote.R
-import com.factory.samsungremote.data.registry.AppShortcut
-import com.factory.samsungremote.data.registry.AppShortcutCatalog
 import com.factory.samsungremote.data.registry.PopularApps
 import com.factory.samsungremote.data.registry.RemoteKey
 import com.factory.samsungremote.data.registry.RemoteKeyCatalog
@@ -183,17 +182,7 @@ private val NumericKeys: List<RemoteKey> = (0..9).map { key("KEY_$it") }
 /** Key the streaming shortcuts fall back to when a launch reports failure. */
 private val FallbackNavKey = key("KEY_HOME")
 
-private fun appShortcut(appId: String): AppShortcut =
-    requireNotNull(AppShortcutCatalog.findByAppId(appId)) {
-        "Missing app shortcut in catalog: $appId"
-    }
-
-private val AppNetflix = appShortcut("3201907018807")
-private val AppPrime = appShortcut("3201910019365")
-private val AppDisney = appShortcut("3201901017640")
-private val AppYouTube = appShortcut("111299001912")
-
-/** Brand accents for the streaming shortcut chips (purely cosmetic). */
+/** Brand accents for known streaming services (badge background in app tiles). */
 private val NetflixColor = Color(0xFFE50914)
 private val PrimeColor = Color(0xFF00A8E1)
 private val DisneyColor = Color(0xFF113CCF)
@@ -201,24 +190,6 @@ private val YouTubeColor = Color(0xFFFF0000)
 
 /** Neutral badge color for discovered apps without a known brand accent. */
 private val GenericAppColor = Color(0xFF5B6470)
-
-/**
- * Resolves the app id to launch for a curated [shortcut] against the TV's
- * [installed] app list: prefer an entry whose id already matches, else match by
- * name (exact, then containment), falling back to the catalog id when discovery
- * hasn't run or the app isn't present. This is what makes the curated buttons
- * work across TV models whose ids differ (ADR-0010).
- */
-private fun resolveAppId(shortcut: AppShortcut, installed: List<InstalledApp>): String {
-    if (installed.isEmpty()) return shortcut.appId
-    val match = installed.firstOrNull { it.appId == shortcut.appId }
-        ?: installed.firstOrNull { it.name.equals(shortcut.name, ignoreCase = true) }
-        ?: installed.firstOrNull {
-            it.name.contains(shortcut.name, ignoreCase = true) ||
-                shortcut.name.contains(it.name, ignoreCase = true)
-        }
-    return match?.appId ?: shortcut.appId
-}
 
 /** Brand accent for a discovered [app] when its name matches a known service. */
 private fun accentFor(app: InstalledApp): Color = when {
@@ -313,11 +284,6 @@ fun RemoteScreen(
             onIntent(RemoteIntent.PressKey(FallbackNavKey))
         }
     }
-    // A curated shortcut launches the app id the TV actually reports for it (so the
-    // button works on any model), falling back to the catalog id before discovery.
-    val launch: (AppShortcut) -> Unit = { shortcut ->
-        launchById(resolveAppId(shortcut, installedApps))
-    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -360,11 +326,21 @@ fun RemoteScreen(
             }
             VolumeChannelRow(onPress = press)
             SectionCard(title = "Media") { MediaRow(onPress = press) }
-            SectionCard(title = "Favoritos") { AppGrid(onLaunch = launch) }
+
+            // Favoritos = exactly the apps the user pinned (⭐) from the list below
+            // (ADR-0011). Empty until the user pins something.
             val favoriteIds = favoriteApps.mapTo(mutableSetOf()) { it.appId }
-            // Apps the user pinned from the full list (ADR-0011).
-            if (favoriteApps.isNotEmpty()) {
-                SectionCard(title = "Meus apps") {
+            SectionCard(title = "Favoritos") {
+                if (favoriteApps.isEmpty()) {
+                    Text(
+                        text = "Você ainda não fixou apps. Abra \"Apps da sua TV\" abaixo " +
+                            "e toque na ⭐ para fixar aqui.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 13.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                } else {
                     InstalledAppGrid(
                         apps = favoriteApps,
                         favoriteIds = favoriteIds,
@@ -374,10 +350,10 @@ fun RemoteScreen(
                     )
                 }
             }
-            // App pick-list to launch and pin (ADR-0010/0011). Precedence: apps the
-            // TV pushed via discovery (works on some TVs); else the apps detected by
-            // the initial-setup probe (correct ids for this model); else the curated
-            // popular list. The user stars any of them into "Meus apps".
+
+            // App pick-list to launch and pin (ADR-0010/0011), collapsible so it
+            // isn't open all the time. Precedence: apps the TV pushed via discovery;
+            // else the apps detected by the setup probe; else the curated popular list.
             val detectedApps = (appSetup as? SetupState.Done)?.detected.orEmpty()
             val discovered = installedApps.isNotEmpty()
             val pickList = when {
@@ -390,7 +366,7 @@ fun RemoteScreen(
                 detectedApps.isNotEmpty() -> "Apps da sua TV"
                 else -> "Apps populares"
             }
-            SectionCard(title = pickTitle) {
+            CollapsibleSectionCard(title = pickTitle) {
                 if (!discovered) {
                     AppSetupBar(
                         setup = appSetup,
@@ -847,59 +823,6 @@ private fun NumericKeypad(
 }
 
 /**
- * Streaming app shortcuts as a 2×2 grid of tiles, each with a brand-colored
- * badge (the app initial) and its name — a cleaner, launcher-style layout than
- * a cramped single row.
- */
-@Composable
-private fun AppGrid(
-    onLaunch: (AppShortcut) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            AppTile(
-                label = stringResource(R.string.remote_app_netflix),
-                initial = "N",
-                accent = NetflixColor,
-                tag = RemoteTestTags.APP_NETFLIX,
-                onClick = { onLaunch(AppNetflix) },
-                modifier = Modifier.weight(1f),
-            )
-            AppTile(
-                label = stringResource(R.string.remote_app_prime),
-                initial = "P",
-                accent = PrimeColor,
-                tag = RemoteTestTags.APP_PRIME,
-                onClick = { onLaunch(AppPrime) },
-                modifier = Modifier.weight(1f),
-            )
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            AppTile(
-                label = stringResource(R.string.remote_app_disney),
-                initial = "D",
-                accent = DisneyColor,
-                tag = RemoteTestTags.APP_DISNEY,
-                onClick = { onLaunch(AppDisney) },
-                modifier = Modifier.weight(1f),
-            )
-            AppTile(
-                label = stringResource(R.string.remote_app_youtube),
-                initial = "Y",
-                accent = YouTubeColor,
-                tag = RemoteTestTags.APP_YOUTUBE,
-                onClick = { onLaunch(AppYouTube) },
-                modifier = Modifier.weight(1f),
-            )
-        }
-    }
-}
-
-/**
  * A 2-column grid of discovered apps (ADR-0010/0011). Each tile launches the app
  * by the id the TV itself reported (always correct for that model) and carries a
  * star toggle to pin/unpin it to the home screen. Known brands get their accent
@@ -1196,60 +1119,6 @@ private fun DigitButton(
 }
 
 /**
- * A streaming app tile: a rounded surface with a brand-colored circular badge
- * (the app's [initial]) and its [label]. Carries a "Launch <app>" TalkBack
- * description and a ≥ 48 dp target.
- */
-@Composable
-private fun AppTile(
-    label: String,
-    initial: String,
-    accent: Color,
-    tag: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val description = stringResource(R.string.remote_cd_app_launch, label)
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        modifier = modifier
-            .sizeIn(minHeight = 64.dp)
-            .testTag(tag)
-            .semantics { contentDescription = description },
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .background(accent, CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = initial,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
-                )
-            }
-            Spacer(Modifier.width(12.dp))
-            Text(
-                text = label,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
-}
-
-/**
  * A grouping card with a small caption header, used to separate the keypad,
  * media and apps sections into clear blocks.
  */
@@ -1271,6 +1140,58 @@ private fun SectionCard(
         ) {
             Row(Modifier.fillMaxWidth()) { Caption(title) }
             content()
+        }
+    }
+}
+
+/**
+ * Like [SectionCard] but with a tappable header that expands/collapses its content
+ * (chevron indicates state). Starts collapsed so long lists (the app pick-list)
+ * don't take over the screen; the expanded/collapsed state survives recomposition
+ * and config changes via [rememberSaveable].
+ */
+@Composable
+private fun CollapsibleSectionCard(
+    title: String,
+    modifier: Modifier = Modifier,
+    initiallyExpanded: Boolean = false,
+    content: @Composable () -> Unit,
+) {
+    var expanded by rememberSaveable { mutableStateOf(initiallyExpanded) }
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surface,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded }
+                    .testTag("remote_section_${title}"),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Caption(title)
+                Icon(
+                    imageVector = if (expanded) {
+                        Icons.Rounded.KeyboardArrowUp
+                    } else {
+                        Icons.Rounded.KeyboardArrowDown
+                    },
+                    contentDescription = if (expanded) "Recolher $title" else "Expandir $title",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            AnimatedVisibility(visible = expanded) {
+                Column(
+                    modifier = Modifier.padding(top = 12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    content()
+                }
+            }
         }
     }
 }
