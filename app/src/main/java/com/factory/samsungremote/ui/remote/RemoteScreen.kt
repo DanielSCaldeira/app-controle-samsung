@@ -1,46 +1,86 @@
 package com.factory.samsungremote.ui.remote
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Button
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.Send
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Dialpad
+import androidx.compose.material.icons.rounded.FastForward
+import androidx.compose.material.icons.rounded.FastRewind
+import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowLeft
+import androidx.compose.material.icons.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
+import androidx.compose.material.icons.rounded.Menu
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.PowerSettingsNew
+import androidx.compose.material.icons.rounded.Remove
+import androidx.compose.material.icons.rounded.Stop
+import androidx.compose.material.icons.rounded.VolumeDown
+import androidx.compose.material.icons.rounded.VolumeOff
+import androidx.compose.material.icons.rounded.VolumeUp
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.IconButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
+import kotlinx.coroutines.delay
 import com.factory.samsungremote.R
 import com.factory.samsungremote.data.registry.AppShortcut
 import com.factory.samsungremote.data.registry.AppShortcutCatalog
 import com.factory.samsungremote.data.registry.RemoteKey
 import com.factory.samsungremote.data.registry.RemoteKeyCatalog
 import com.factory.samsungremote.network.discovery.DiscoveredTv
+import com.factory.samsungremote.network.session.ConnectionState
 import com.factory.samsungremote.viewmodel.RemoteIntent
 import com.factory.samsungremote.viewmodel.RemoteViewModel
 
@@ -71,6 +111,7 @@ object RemoteTestTags {
     const val APP_YOUTUBE = "remote_app_youtube"
     const val TEXT_INPUT = "remote_text_input"
     const val TEXT_SEND = "remote_text_send"
+    const val KEYPAD_TOGGLE = "remote_keypad_toggle"
 
     /**
      * Test tag for numeric-keypad digit [n] (0..9), the control that emits
@@ -85,10 +126,16 @@ object RemoteTestTags {
 
 /**
  * Minimum touch-target side for every control, per the Material accessibility
- * guideline (≥ 48 dp) called out in this task's acceptance criteria. Applied via
- * [Modifier.sizeIn] so labels can still grow the button beyond the floor.
+ * guideline (≥ 48 dp). All controls are sized at or above this floor.
  */
 private val MinTouchTarget = 56.dp
+
+/**
+ * Debounce window for search-as-you-type: a burst of keystrokes collapses into a
+ * single text send once the user pauses, so the TV's focused field stays in sync
+ * without one network call per character.
+ */
+private const val LiveSendDebounceMs = 300L
 
 /**
  * The keys this screen drives, resolved once from the static [RemoteKeyCatalog]
@@ -119,25 +166,13 @@ private val KeyFf = key("KEY_FF")
 
 /**
  * The numeric keypad keys (`KEY_0`..`KEY_9`), indexed by digit so
- * `NumericKeys[n]` is the [RemoteKey] for digit `n`. Resolved once from the
- * static [RemoteKeyCatalog] so the UI never hard-codes a `KEY_<n>` string.
+ * `NumericKeys[n]` is the [RemoteKey] for digit `n`.
  */
 private val NumericKeys: List<RemoteKey> = (0..9).map { key("KEY_$it") }
 
-/**
- * Key the streaming shortcuts fall back to when
- * [com.factory.samsungremote.data.repository.CommandRepository.launchApp] reports
- * the app did not open (e.g. the deep link is unsupported on this TV):
- * we drop the user onto the TV Home screen so they can navigate to the app by
- * key instead of being left with a silent no-op.
- */
+/** Key the streaming shortcuts fall back to when a launch reports failure. */
 private val FallbackNavKey = key("KEY_HOME")
 
-/**
- * The launchable streaming apps this screen exposes as dedicated shortcuts,
- * resolved once from the static [AppShortcutCatalog] so the UI never hard-codes a
- * Tizen `appId` and stays in sync with the catalog.
- */
 private fun appShortcut(appId: String): AppShortcut =
     requireNotNull(AppShortcutCatalog.findByAppId(appId)) {
         "Missing app shortcut in catalog: $appId"
@@ -148,18 +183,15 @@ private val AppPrime = appShortcut("3201910019365")
 private val AppDisney = appShortcut("3201901017640")
 private val AppYouTube = appShortcut("111299001912")
 
+/** Brand accents for the streaming shortcut chips (purely cosmetic). */
+private val NetflixColor = Color(0xFFE50914)
+private val PrimeColor = Color(0xFF00A8E1)
+private val DisneyColor = Color(0xFF113CCF)
+private val YouTubeColor = Color(0xFFFF0000)
+
 /**
  * Remote-control entry point: binds the [RemoteViewModel] to the stateless
  * [RemoteScreen] and opens the control connection to the chosen TV.
- *
- * On entry (and after process recreation) it replays the pairing [token] to
- * [RemoteViewModel.connect] for [tv], so the session connects to an authorized
- * device and the controls' intents reach an open socket. Both inputs are carried
- * here by the host's navigation from discovery → pairing → remote.
- *
- * Kept thin and Hilt-aware so it stays out of the UI test path — tests drive
- * [RemoteScreen] directly with a recording `onIntent` callback (no ViewModel/
- * Hilt/session involved), mirroring the discovery/pairing screens.
  *
  * @param tv    The TV that was discovered and paired with; the session connects here.
  * @param token Authorization token returned by pairing, replayed so an already
@@ -172,51 +204,46 @@ fun RemoteRoute(
     modifier: Modifier = Modifier,
     viewModel: RemoteViewModel = hiltViewModel(),
 ) {
-    // Open (or re-target) the connection for the paired TV, replaying the token.
     LaunchedEffect(tv.id, token) { viewModel.connect(tv, token) }
 
-    // Collected so future state-driven UI (connected/reconnecting) can react; the
-    // controls themselves are stateless and only emit intents.
     val connectionState by viewModel.connectionState.collectAsState()
     RemoteScreen(
         onIntent = { viewModel.onIntent(it) },
+        tvName = tv.name,
+        connectionState = connectionState,
         modifier = modifier,
     )
 }
 
 /**
- * Stateless remote-control screen: renders the D-pad (up/down/left/right + OK),
- * the RETURN / HOME / MENU navigation keys, the volume (VOL- / MUTE / VOL+) and
- * channel (CH- / CH+) controls, the numeric keypad (KEY_0..KEY_9) for direct
- * channel entry, the media transport bar (REW / PLAY / PAUSE / STOP / FF), the
- * streaming app shortcuts (Netflix / Prime Video / Disney+ /
- * YouTube) and a POWER toggle, reporting every action as a [RemoteIntent]
- * through [onIntent].
+ * Stateless remote-control screen. Renders, in a single scrollable column with a
+ * clear visual hierarchy: a status header with a POWER toggle, a circular D-pad
+ * (the hero control) with the OK center, the RETURN / HOME / MENU navigation row,
+ * a text-entry/search row, volume & channel rockers, the media transport bar, the
+ * numeric keypad and the streaming app shortcuts — reporting every action as a
+ * [RemoteIntent] through [onIntent].
  *
- * Holding no state of its own keeps it trivially previewable and testable: a
- * test can pass a recording `onIntent` and assert that tapping each control
- * emits the matching intent. Every control honors a ≥ 48 dp touch target.
+ * Every control carries a stable test tag, a non-empty `contentDescription` for
+ * TalkBack, and a ≥ 48 dp touch target. [onIntent] returns whether the resulting
+ * frame reached an open connection; the streaming shortcuts use that to fall back
+ * to Home navigation when an app fails to launch.
  *
- * [onIntent] returns whether the resulting frame reached an open connection
- * (propagated from [com.factory.samsungremote.data.repository.CommandRepository]
- * via the ViewModel). The streaming shortcuts use this signal: when a
- * [RemoteIntent.LaunchApp] reports failure, the screen falls back to a
- * [RemoteIntent.PressKey] on [FallbackNavKey] (Home) so the user can reach the
- * app by key instead of facing a silent no-op.
- *
- * @param onIntent Called with the [RemoteIntent] produced by a control press;
- *                 returns `true` when the frame reached an open connection.
+ * @param onIntent        Called with the [RemoteIntent] produced by a control;
+ *                        returns `true` when the frame reached an open connection.
+ * @param tvName          Name of the connected TV for the header; `null` → generic title.
+ * @param connectionState Current session state, surfaced as a colored status dot.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RemoteScreen(
     onIntent: (RemoteIntent) -> Boolean,
     modifier: Modifier = Modifier,
+    tvName: String? = null,
+    connectionState: ConnectionState? = null,
 ) {
     val press: (RemoteKey) -> Unit = { onIntent(RemoteIntent.PressKey(it)) }
     val type: (String) -> Unit = { text -> onIntent(RemoteIntent.TypeText(text)) }
     val launch: (AppShortcut) -> Unit = { shortcut ->
-        // Fall back to key navigation (Home) when the app fails to launch.
         if (!onIntent(RemoteIntent.LaunchApp(shortcut.appId))) {
             onIntent(RemoteIntent.PressKey(FallbackNavKey))
         }
@@ -224,136 +251,265 @@ fun RemoteScreen(
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.remote_title)) },
-                actions = {
-                    val powerDescription = stringResource(R.string.remote_cd_power)
-                    IconButton(
-                        onClick = { press(KeyPower) },
-                        modifier = Modifier
-                            .sizeIn(minWidth = MinTouchTarget, minHeight = MinTouchTarget)
-                            .testTag(RemoteTestTags.POWER)
-                            .semantics {
-                                contentDescription = powerDescription
-                            },
-                    ) {
-                        Text("⏻", style = MaterialTheme.typography.titleLarge)
-                    }
-                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    titleContentColor = MaterialTheme.colorScheme.onBackground,
+                ),
+                title = { HeaderTitle(tvName, connectionState) },
+                actions = { PowerButton(onClick = { press(KeyPower) }) },
             )
         },
     ) { innerPadding ->
+        var panelExpanded by remember { mutableStateOf(false) }
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(24.dp),
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             DPad(onPress = press)
-            NavRow(onPress = press)
-            TextEntryRow(onSend = type)
+            NavRow(
+                onPress = press,
+                panelExpanded = panelExpanded,
+                onTogglePanel = { panelExpanded = !panelExpanded },
+            )
+            // Keypad + text entry are used less often, so they stay hidden behind
+            // the keypad toggle and expand inline only when asked for.
+            AnimatedVisibility(visible = panelExpanded) {
+                SectionCard(title = "Keypad & search") {
+                    TextEntryRow(onSend = type)
+                    Spacer(Modifier.height(4.dp))
+                    NumericKeypad(onPress = press)
+                }
+            }
             VolumeChannelRow(onPress = press)
-            NumericKeypad(onPress = press)
-            MediaRow(onPress = press)
-            ShortcutRow(onLaunch = launch)
+            SectionCard(title = "Media") { MediaRow(onPress = press) }
+            SectionCard(title = "Apps") { AppGrid(onLaunch = launch) }
+            Spacer(Modifier.height(8.dp))
         }
     }
 }
 
+/** TV name + a colored connection-status dot in the app bar. */
+@Composable
+private fun HeaderTitle(tvName: String?, connectionState: ConnectionState?) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (connectionState != null) {
+            val dot = when (connectionState) {
+                is ConnectionState.Connected -> Color(0xFF36D399)
+                is ConnectionState.Connecting, is ConnectionState.Reconnecting ->
+                    MaterialTheme.colorScheme.secondary
+                is ConnectionState.Error -> MaterialTheme.colorScheme.error
+                is ConnectionState.Disconnected -> MaterialTheme.colorScheme.onSurfaceVariant
+            }
+            Box(
+                Modifier
+                    .padding(end = 10.dp)
+                    .size(9.dp)
+                    .background(dot, CircleShape),
+            )
+        }
+        Text(
+            text = tvName ?: stringResource(R.string.remote_title),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+/** Round Power toggle, tinted with the reserved error/red color. */
+@Composable
+private fun PowerButton(onClick: () -> Unit) {
+    val description = stringResource(R.string.remote_cd_power)
+    CircleControl(
+        icon = Icons.Rounded.PowerSettingsNew,
+        contentDescription = description,
+        tag = RemoteTestTags.POWER,
+        onClick = onClick,
+        size = MinTouchTarget,
+        container = MaterialTheme.colorScheme.error.copy(alpha = 0.16f),
+        content = MaterialTheme.colorScheme.error,
+    )
+}
+
 /**
- * The directional pad: UP on top, LEFT / OK / RIGHT in the middle and DOWN at the
- * bottom — the conventional cross layout, with OK ([RemoteKey] `KEY_ENTER`) at the
- * center.
+ * The directional pad as a single circular control: a layered disc with UP /
+ * DOWN / LEFT / RIGHT arrows at the cardinal points and the OK (`KEY_ENTER`)
+ * button filling the center — the conventional cross, the way physical remotes
+ * and modern remote apps present it.
  */
 @Composable
 private fun DPad(
     onPress: (RemoteKey) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+    val ring = MaterialTheme.colorScheme.surfaceVariant
+    Box(
+        modifier = modifier
+            .size(268.dp)
+            .background(MaterialTheme.colorScheme.surface, CircleShape)
+            .padding(6.dp)
+            .background(ring, CircleShape),
+        contentAlignment = Alignment.Center,
     ) {
-        DirButton(
-            label = stringResource(R.string.remote_dpad_up),
+        ArrowControl(
+            icon = Icons.Rounded.KeyboardArrowUp,
             contentDescription = stringResource(R.string.remote_cd_up),
             tag = RemoteTestTags.DPAD_UP,
             onClick = { onPress(KeyUp) },
+            modifier = Modifier.align(Alignment.TopCenter),
         )
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            DirButton(
-                label = stringResource(R.string.remote_dpad_left),
-                contentDescription = stringResource(R.string.remote_cd_left),
-                tag = RemoteTestTags.DPAD_LEFT,
-                onClick = { onPress(KeyLeft) },
-            )
-            OkButton(onClick = { onPress(KeyEnter) })
-            DirButton(
-                label = stringResource(R.string.remote_dpad_right),
-                contentDescription = stringResource(R.string.remote_cd_right),
-                tag = RemoteTestTags.DPAD_RIGHT,
-                onClick = { onPress(KeyRight) },
-            )
-        }
-        DirButton(
-            label = stringResource(R.string.remote_dpad_down),
+        ArrowControl(
+            icon = Icons.Rounded.KeyboardArrowDown,
             contentDescription = stringResource(R.string.remote_cd_down),
             tag = RemoteTestTags.DPAD_DOWN,
             onClick = { onPress(KeyDown) },
+            modifier = Modifier.align(Alignment.BottomCenter),
         )
+        ArrowControl(
+            icon = Icons.Rounded.KeyboardArrowLeft,
+            contentDescription = stringResource(R.string.remote_cd_left),
+            tag = RemoteTestTags.DPAD_LEFT,
+            onClick = { onPress(KeyLeft) },
+            modifier = Modifier.align(Alignment.CenterStart),
+        )
+        ArrowControl(
+            icon = Icons.Rounded.KeyboardArrowRight,
+            contentDescription = stringResource(R.string.remote_cd_right),
+            tag = RemoteTestTags.DPAD_RIGHT,
+            onClick = { onPress(KeyRight) },
+            modifier = Modifier.align(Alignment.CenterEnd),
+        )
+        OkButton(onClick = { onPress(KeyEnter) })
     }
 }
 
-/** RETURN / HOME / MENU laid out in a single row beneath the D-pad. */
+/** A transparent arrow hit-area sitting on the D-pad disc (≥ 56 dp). */
+@Composable
+private fun ArrowControl(
+    icon: ImageVector,
+    contentDescription: String,
+    tag: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val description = contentDescription
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        modifier = modifier
+            .size(72.dp)
+            .testTag(tag)
+            .semantics { this.contentDescription = description },
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(34.dp))
+        }
+    }
+}
+
+/** The center OK / ENTER button — a filled accent disc. */
+@Composable
+private fun OkButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val description = stringResource(R.string.remote_cd_ok)
+    Surface(
+        onClick = onClick,
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.primary,
+        contentColor = MaterialTheme.colorScheme.onPrimary,
+        modifier = modifier
+            .size(104.dp)
+            .testTag(RemoteTestTags.OK)
+            .semantics { contentDescription = description },
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = stringResource(R.string.remote_ok),
+                fontWeight = FontWeight.Bold,
+                fontSize = 20.sp,
+            )
+        }
+    }
+}
+
+/**
+ * RETURN / HOME / MENU beneath the D-pad, plus a Keypad toggle that reveals the
+ * less-used numeric keypad + text-entry panel on demand.
+ */
 @Composable
 private fun NavRow(
     onPress: (RemoteKey) -> Unit,
+    panelExpanded: Boolean,
+    onTogglePanel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Row(
         modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        NavButton(
-            label = stringResource(R.string.remote_return),
+        CircleControl(
+            icon = Icons.AutoMirrored.Rounded.ArrowBack,
             contentDescription = stringResource(R.string.remote_cd_return),
             tag = RemoteTestTags.RETURN,
             onClick = { onPress(KeyReturn) },
         )
-        NavButton(
-            label = stringResource(R.string.remote_home),
+        CircleControl(
+            icon = Icons.Rounded.Home,
             contentDescription = stringResource(R.string.remote_cd_home),
             tag = RemoteTestTags.HOME,
             onClick = { onPress(KeyHome) },
+            container = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
+            content = MaterialTheme.colorScheme.primary,
         )
-        NavButton(
-            label = stringResource(R.string.remote_menu),
+        CircleControl(
+            icon = Icons.Rounded.Menu,
             contentDescription = stringResource(R.string.remote_cd_menu),
             tag = RemoteTestTags.MENU,
             onClick = { onPress(KeyMenu) },
+        )
+        CircleControl(
+            icon = Icons.Rounded.Dialpad,
+            contentDescription = stringResource(R.string.remote_cd_keypad_toggle),
+            tag = RemoteTestTags.KEYPAD_TOGGLE,
+            onClick = onTogglePanel,
+            container = if (panelExpanded) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant
+            },
+            content = if (panelExpanded) {
+                MaterialTheme.colorScheme.onPrimary
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            },
         )
     }
 }
 
 /**
  * Text-entry control: a single-line field plus a Send button for typing into the
- * focused field on the TV (e.g. a search box). The field holds its own transient
- * text via [rememberSaveable] — the only UI state on this otherwise-stateless
- * screen — so it survives recomposition and configuration changes.
+ * focused field on the TV. The field holds its own transient text via
+ * [rememberSaveable].
  *
- * Submitting (tapping Send or pressing the keyboard's Done/Search action) forwards
- * the current text to [onSend], which the screen routes to a
- * [RemoteIntent.TypeText]; the protocol layer Base64-encodes it on the wire. Blank
- * input is ignored and the field is cleared after a successful send so the next
- * search starts fresh. Both controls honor the ≥ 48 dp touch target.
+ * **Search-as-you-type.** As the user types, the current text is mirrored onto the
+ * TV's focused field after a short [LiveSendDebounceMs] pause, so a burst of
+ * keystrokes collapses into one send and the TV keeps up live (Samsung's IME input
+ * replaces the field contents, so sending the latest full string stays in sync).
+ * The Send button remains for an explicit immediate submit, after which the field
+ * is cleared. Blank input is ignored.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -362,6 +518,15 @@ private fun TextEntryRow(
     modifier: Modifier = Modifier,
 ) {
     var text by rememberSaveable { mutableStateOf("") }
+    // Mirror keystrokes to the TV after the user pauses; relaunching on each change
+    // cancels the prior pending send, which is the debounce.
+    LaunchedEffect(text) {
+        val current = text
+        if (current.isNotBlank()) {
+            delay(LiveSendDebounceMs)
+            onSend(current)
+        }
+    }
     val submit: () -> Unit = {
         if (text.isNotBlank()) {
             onSend(text)
@@ -377,6 +542,7 @@ private fun TextEntryRow(
             value = text,
             onValueChange = { text = it },
             singleLine = true,
+            shape = RoundedCornerShape(16.dp),
             label = { Text(stringResource(R.string.remote_text_label)) },
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
             keyboardActions = KeyboardActions(onSend = { submit() }),
@@ -385,23 +551,20 @@ private fun TextEntryRow(
                 .sizeIn(minHeight = MinTouchTarget)
                 .testTag(RemoteTestTags.TEXT_INPUT),
         )
-        val sendDescription = stringResource(R.string.remote_cd_text_send)
-        Button(
+        CircleControl(
+            icon = Icons.AutoMirrored.Rounded.Send,
+            contentDescription = stringResource(R.string.remote_cd_text_send),
+            tag = RemoteTestTags.TEXT_SEND,
             onClick = submit,
-            modifier = Modifier
-                .sizeIn(minWidth = MinTouchTarget, minHeight = MinTouchTarget)
-                .testTag(RemoteTestTags.TEXT_SEND)
-                .semantics { contentDescription = sendDescription },
-        ) {
-            Text(stringResource(R.string.remote_text_send))
-        }
+            container = MaterialTheme.colorScheme.primary,
+            content = MaterialTheme.colorScheme.onPrimary,
+        )
     }
 }
 
 /**
- * Volume and channel controls laid out in a single row beneath the navigation
- * keys: VOL- / MUTE / VOL+ followed by CH- / CH+. Each press emits the matching
- * [RemoteKey] (`KEY_VOLDOWN`, `KEY_MUTE`, `KEY_VOLUP`, `KEY_CHDOWN`, `KEY_CHUP`).
+ * Volume and channel "rockers" side by side: VOL- / MUTE / VOL+ in one pill and
+ * CH- / CH+ in another, each emitting the matching [RemoteKey].
  */
 @Composable
 private fun VolumeChannelRow(
@@ -409,47 +572,132 @@ private fun VolumeChannelRow(
     modifier: Modifier = Modifier,
 ) {
     Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Rocker(
+            title = "Volume",
+            modifier = Modifier.weight(1f),
+        ) {
+            FlatControl(
+                icon = Icons.Rounded.VolumeDown,
+                contentDescription = stringResource(R.string.remote_cd_vol_down),
+                tag = RemoteTestTags.VOL_DOWN,
+                onClick = { onPress(KeyVolDown) },
+            )
+            FlatControl(
+                icon = Icons.Rounded.VolumeOff,
+                contentDescription = stringResource(R.string.remote_cd_mute),
+                tag = RemoteTestTags.MUTE,
+                onClick = { onPress(KeyMute) },
+            )
+            FlatControl(
+                icon = Icons.Rounded.VolumeUp,
+                contentDescription = stringResource(R.string.remote_cd_vol_up),
+                tag = RemoteTestTags.VOL_UP,
+                onClick = { onPress(KeyVolUp) },
+            )
+        }
+        Rocker(
+            title = "Channel",
+            modifier = Modifier.weight(1f),
+        ) {
+            FlatControl(
+                icon = Icons.Rounded.Remove,
+                contentDescription = stringResource(R.string.remote_cd_ch_down),
+                tag = RemoteTestTags.CH_DOWN,
+                onClick = { onPress(KeyChDown) },
+            )
+            FlatControl(
+                icon = Icons.Rounded.Add,
+                contentDescription = stringResource(R.string.remote_cd_ch_up),
+                tag = RemoteTestTags.CH_UP,
+                onClick = { onPress(KeyChUp) },
+            )
+        }
+    }
+}
+
+/** A rounded "pill" grouping rocker buttons under a small caption. */
+@Composable
+private fun Rocker(
+    title: String,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    Column(
         modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Caption(title)
+        Surface(
+            shape = RoundedCornerShape(28.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                content()
+            }
+        }
+    }
+}
+
+/**
+ * Media transport bar: REW / PLAY / PAUSE / STOP / FF, each emitting the matching
+ * [RemoteKey].
+ */
+@Composable
+private fun MediaRow(
+    onPress: (RemoteKey) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        NavButton(
-            label = stringResource(R.string.remote_vol_down),
-            contentDescription = stringResource(R.string.remote_cd_vol_down),
-            tag = RemoteTestTags.VOL_DOWN,
-            onClick = { onPress(KeyVolDown) },
+        FlatControl(
+            icon = Icons.Rounded.FastRewind,
+            contentDescription = stringResource(R.string.remote_cd_rew),
+            tag = RemoteTestTags.REW,
+            onClick = { onPress(KeyRew) },
         )
-        NavButton(
-            label = stringResource(R.string.remote_mute),
-            contentDescription = stringResource(R.string.remote_cd_mute),
-            tag = RemoteTestTags.MUTE,
-            onClick = { onPress(KeyMute) },
+        FlatControl(
+            icon = Icons.Rounded.PlayArrow,
+            contentDescription = stringResource(R.string.remote_cd_play),
+            tag = RemoteTestTags.PLAY,
+            onClick = { onPress(KeyPlay) },
+            content = MaterialTheme.colorScheme.primary,
         )
-        NavButton(
-            label = stringResource(R.string.remote_vol_up),
-            contentDescription = stringResource(R.string.remote_cd_vol_up),
-            tag = RemoteTestTags.VOL_UP,
-            onClick = { onPress(KeyVolUp) },
+        FlatControl(
+            icon = Icons.Rounded.Pause,
+            contentDescription = stringResource(R.string.remote_cd_pause),
+            tag = RemoteTestTags.PAUSE,
+            onClick = { onPress(KeyPause) },
         )
-        NavButton(
-            label = stringResource(R.string.remote_ch_down),
-            contentDescription = stringResource(R.string.remote_cd_ch_down),
-            tag = RemoteTestTags.CH_DOWN,
-            onClick = { onPress(KeyChDown) },
+        FlatControl(
+            icon = Icons.Rounded.Stop,
+            contentDescription = stringResource(R.string.remote_cd_stop),
+            tag = RemoteTestTags.STOP,
+            onClick = { onPress(KeyStop) },
         )
-        NavButton(
-            label = stringResource(R.string.remote_ch_up),
-            contentDescription = stringResource(R.string.remote_cd_ch_up),
-            tag = RemoteTestTags.CH_UP,
-            onClick = { onPress(KeyChUp) },
+        FlatControl(
+            icon = Icons.Rounded.FastForward,
+            contentDescription = stringResource(R.string.remote_cd_ff),
+            tag = RemoteTestTags.FF,
+            onClick = { onPress(KeyFf) },
         )
     }
 }
 
 /**
- * Numeric keypad (`KEY_0`..`KEY_9`) for direct channel entry, laid out as the
- * conventional 3×3 grid (1–9) with 0 centered beneath. Each digit press emits
- * the matching [RemoteKey] (`KEY_<n>`, resolved from [NumericKeys]).
+ * Numeric keypad (`KEY_0`..`KEY_9`) for direct channel entry: the conventional
+ * 3×3 grid (1–9) with 0 centered beneath.
  */
 @Composable
 private fun NumericKeypad(
@@ -459,9 +707,8 @@ private fun NumericKeypad(
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        // Phone-keypad order: 1-9 in three rows, then 0 on its own row.
         listOf(
             listOf(1, 2, 3),
             listOf(4, 5, 6),
@@ -469,7 +716,7 @@ private fun NumericKeypad(
             listOf(0),
         ).forEach { rowDigits ->
             Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(20.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 rowDigits.forEach { digit ->
@@ -484,166 +731,124 @@ private fun NumericKeypad(
 }
 
 /**
- * Media transport bar laid out in a single row beneath the volume/channel
- * controls: REW / PLAY / PAUSE / STOP / FF. Each press emits the matching
- * [RemoteKey] (`KEY_REW`, `KEY_PLAY`, `KEY_PAUSE`, `KEY_STOP`, `KEY_FF`).
+ * Streaming app shortcuts as a 2×2 grid of tiles, each with a brand-colored
+ * badge (the app initial) and its name — a cleaner, launcher-style layout than
+ * a cramped single row.
  */
 @Composable
-private fun MediaRow(
-    onPress: (RemoteKey) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        NavButton(
-            label = stringResource(R.string.remote_rew),
-            contentDescription = stringResource(R.string.remote_cd_rew),
-            tag = RemoteTestTags.REW,
-            onClick = { onPress(KeyRew) },
-        )
-        NavButton(
-            label = stringResource(R.string.remote_play),
-            contentDescription = stringResource(R.string.remote_cd_play),
-            tag = RemoteTestTags.PLAY,
-            onClick = { onPress(KeyPlay) },
-        )
-        NavButton(
-            label = stringResource(R.string.remote_pause),
-            contentDescription = stringResource(R.string.remote_cd_pause),
-            tag = RemoteTestTags.PAUSE,
-            onClick = { onPress(KeyPause) },
-        )
-        NavButton(
-            label = stringResource(R.string.remote_stop),
-            contentDescription = stringResource(R.string.remote_cd_stop),
-            tag = RemoteTestTags.STOP,
-            onClick = { onPress(KeyStop) },
-        )
-        NavButton(
-            label = stringResource(R.string.remote_ff),
-            contentDescription = stringResource(R.string.remote_cd_ff),
-            tag = RemoteTestTags.FF,
-            onClick = { onPress(KeyFf) },
-        )
-    }
-}
-
-/**
- * Streaming app shortcuts laid out in a single row beneath the media controls:
- * Netflix / Prime Video / Disney+ / YouTube. Each press asks [onLaunch] to launch
- * the matching [AppShortcut] (resolved from [AppShortcutCatalog]); the screen's
- * `launch` handler routes that to a [RemoteIntent.LaunchApp] and falls back to key
- * navigation when the app does not open.
- */
-@Composable
-private fun ShortcutRow(
+private fun AppGrid(
     onLaunch: (AppShortcut) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalAlignment = Alignment.CenterVertically,
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        ShortcutButton(
-            label = stringResource(R.string.remote_app_netflix),
-            tag = RemoteTestTags.APP_NETFLIX,
-            onClick = { onLaunch(AppNetflix) },
-        )
-        ShortcutButton(
-            label = stringResource(R.string.remote_app_prime),
-            tag = RemoteTestTags.APP_PRIME,
-            onClick = { onLaunch(AppPrime) },
-        )
-        ShortcutButton(
-            label = stringResource(R.string.remote_app_disney),
-            tag = RemoteTestTags.APP_DISNEY,
-            onClick = { onLaunch(AppDisney) },
-        )
-        ShortcutButton(
-            label = stringResource(R.string.remote_app_youtube),
-            tag = RemoteTestTags.APP_YOUTUBE,
-            onClick = { onLaunch(AppYouTube) },
-        )
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            AppTile(
+                label = stringResource(R.string.remote_app_netflix),
+                initial = "N",
+                accent = NetflixColor,
+                tag = RemoteTestTags.APP_NETFLIX,
+                onClick = { onLaunch(AppNetflix) },
+                modifier = Modifier.weight(1f),
+            )
+            AppTile(
+                label = stringResource(R.string.remote_app_prime),
+                initial = "P",
+                accent = PrimeColor,
+                tag = RemoteTestTags.APP_PRIME,
+                onClick = { onLaunch(AppPrime) },
+                modifier = Modifier.weight(1f),
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            AppTile(
+                label = stringResource(R.string.remote_app_disney),
+                initial = "D",
+                accent = DisneyColor,
+                tag = RemoteTestTags.APP_DISNEY,
+                onClick = { onLaunch(AppDisney) },
+                modifier = Modifier.weight(1f),
+            )
+            AppTile(
+                label = stringResource(R.string.remote_app_youtube),
+                initial = "Y",
+                accent = YouTubeColor,
+                tag = RemoteTestTags.APP_YOUTUBE,
+                onClick = { onLaunch(AppYouTube) },
+                modifier = Modifier.weight(1f),
+            )
+        }
     }
 }
 
 /**
- * A directional (arrow) D-pad button with a ≥ 48 dp touch target and an explicit
- * [contentDescription] so TalkBack announces the direction in words ("Navigate up")
- * rather than the bare arrow [label].
+ * Round icon control used across the screen (nav, power, send). Honors the
+ * ≥ 48 dp touch target and carries [contentDescription] for TalkBack.
  */
 @Composable
-private fun DirButton(
-    label: String,
+private fun CircleControl(
+    icon: ImageVector,
     contentDescription: String,
     tag: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    size: Dp = 60.dp,
+    container: Color = MaterialTheme.colorScheme.surfaceVariant,
+    content: Color = MaterialTheme.colorScheme.onSurface,
 ) {
     val description = contentDescription
-    FilledTonalButton(
+    Surface(
         onClick = onClick,
+        shape = CircleShape,
+        color = container,
+        contentColor = content,
         modifier = modifier
-            .sizeIn(minWidth = MinTouchTarget, minHeight = MinTouchTarget)
+            .size(size)
             .testTag(tag)
             .semantics { this.contentDescription = description },
     ) {
-        Text(label)
-    }
-}
-
-/** The center OK / ENTER button, with an explicit TalkBack description. */
-@Composable
-private fun OkButton(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val description = stringResource(R.string.remote_cd_ok)
-    Button(
-        onClick = onClick,
-        modifier = modifier
-            .sizeIn(minWidth = MinTouchTarget, minHeight = MinTouchTarget)
-            .testTag(RemoteTestTags.OK)
-            .semantics { contentDescription = description },
-    ) {
-        Text(stringResource(R.string.remote_ok))
+        Box(contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(26.dp))
+        }
     }
 }
 
 /**
- * A secondary navigation button (RETURN / HOME / MENU, VOL / CH, media transport)
- * with a ≥ 48 dp target and an explicit [contentDescription] so TalkBack announces
- * the action in words even when the visible [label] is an abbreviation or glyph.
+ * Flat (transparent) icon control used inside the rocker pills and the media bar,
+ * so the surrounding pill provides the background. ≥ 56 dp target, TalkBack desc.
  */
 @Composable
-private fun NavButton(
-    label: String,
+private fun FlatControl(
+    icon: ImageVector,
     contentDescription: String,
     tag: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    content: Color = MaterialTheme.colorScheme.onSurface,
 ) {
     val description = contentDescription
-    OutlinedButton(
+    Surface(
         onClick = onClick,
+        shape = CircleShape,
+        color = Color.Transparent,
+        contentColor = content,
         modifier = modifier
-            .sizeIn(minWidth = MinTouchTarget, minHeight = MinTouchTarget)
+            .size(MinTouchTarget)
             .testTag(tag)
             .semantics { this.contentDescription = description },
     ) {
-        Text(label)
+        Box(contentAlignment = Alignment.Center) {
+            Icon(icon, contentDescription = null, modifier = Modifier.size(28.dp))
+        }
     }
 }
 
 /**
- * A single numeric-keypad button. Labeled with [digit] (0–9) and tagged with
- * [RemoteTestTags.digit] so tests can locate each digit; carries an explicit
- * TalkBack description ("Digit N") and honors the ≥ 48 dp touch target like every
- * other control.
+ * A single numeric-keypad button: a circular tonal disc labeled with [digit],
+ * tagged with [RemoteTestTags.digit] and carrying a "Digit N" TalkBack
+ * description; ≥ 48 dp touch target.
  */
 @Composable
 private fun DigitButton(
@@ -652,36 +857,110 @@ private fun DigitButton(
     modifier: Modifier = Modifier,
 ) {
     val description = stringResource(R.string.remote_cd_digit, digit)
-    FilledTonalButton(
+    Surface(
         onClick = onClick,
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        contentColor = MaterialTheme.colorScheme.onSurface,
         modifier = modifier
-            .sizeIn(minWidth = MinTouchTarget, minHeight = MinTouchTarget)
+            .size(64.dp)
             .testTag(RemoteTestTags.digit(digit))
             .semantics { contentDescription = description },
     ) {
-        Text(digit.toString())
+        Box(contentAlignment = Alignment.Center) {
+            Text(digit.toString(), fontSize = 22.sp, fontWeight = FontWeight.Medium)
+        }
     }
 }
 
 /**
- * A streaming app shortcut button (Netflix / Prime / Disney+ / YouTube), with an
- * explicit "Launch <app>" TalkBack description derived from [label].
+ * A streaming app tile: a rounded surface with a brand-colored circular badge
+ * (the app's [initial]) and its [label]. Carries a "Launch <app>" TalkBack
+ * description and a ≥ 48 dp target.
  */
 @Composable
-private fun ShortcutButton(
+private fun AppTile(
     label: String,
+    initial: String,
+    accent: Color,
     tag: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val description = stringResource(R.string.remote_cd_app_launch, label)
-    FilledTonalButton(
+    Surface(
         onClick = onClick,
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        contentColor = MaterialTheme.colorScheme.onSurface,
         modifier = modifier
-            .sizeIn(minWidth = MinTouchTarget, minHeight = MinTouchTarget)
+            .sizeIn(minHeight = 64.dp)
             .testTag(tag)
             .semantics { contentDescription = description },
     ) {
-        Text(label)
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .background(accent, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = initial,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Text(
+                text = label,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
+}
+
+/**
+ * A grouping card with a small caption header, used to separate the keypad,
+ * media and apps sections into clear blocks.
+ */
+@Composable
+private fun SectionCard(
+    title: String,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surface,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Row(Modifier.fillMaxWidth()) { Caption(title) }
+            content()
+        }
+    }
+}
+
+/** Small uppercase section caption in the secondary text color. */
+@Composable
+private fun Caption(text: String) {
+    Text(
+        text = text.uppercase(),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        fontSize = 11.sp,
+        fontWeight = FontWeight.SemiBold,
+        letterSpacing = 1.5.sp,
+    )
 }
