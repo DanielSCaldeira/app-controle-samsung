@@ -27,6 +27,7 @@ object TizenProtocol {
     private const val TYPE_SEND_INPUT_STRING = "SendInputString"
 
     private const val EVENT_APPS_LAUNCH = "ed.apps.launch"
+    private const val EVENT_INSTALLED_APP_GET = "ed.installedApp.get"
 
     /**
      * Builds a key-press message (`ms.remote.control` / `SendRemoteKey`).
@@ -106,6 +107,55 @@ object TizenProtocol {
             .put("method", METHOD_REMOTE_CONTROL)
             .put("params", params)
             .toString()
+    }
+
+    /**
+     * Builds the request that asks the TV for its list of installed apps
+     * (`ms.channel.emit` / `ed.installedApp.get`). The TV replies with an event of
+     * the same name carrying the apps under `data.data` (see [parseInstalledApps]).
+     *
+     * ```json
+     * {"method":"ms.channel.emit","params":{"event":"ed.installedApp.get","to":"host"}}
+     * ```
+     */
+    fun requestInstalledApps(): String {
+        val params = orderedJson()
+            .put("event", EVENT_INSTALLED_APP_GET)
+            .put("to", "host")
+        return orderedJson()
+            .put("method", METHOD_EMIT)
+            .put("params", params)
+            .toString()
+    }
+
+    /**
+     * Parses an `ed.installedApp.get` reply into the list of [InstalledApp]s the
+     * TV reports under `data.data` (each entry has `appId`, `name`, and optionally
+     * `app_type`/`icon`). Entries without an `appId` are skipped; `name` falls back
+     * to the id when absent.
+     *
+     * @return the apps (possibly empty) when [json] is the installed-app event, or
+     *         `null` when it is a different message / not a JSON object — so the
+     *         caller can ignore unrelated frames.
+     */
+    fun parseInstalledApps(json: String): List<InstalledApp>? {
+        val root = json.toJsonObjectOrNull() ?: return null
+        if (root.optString("event") != EVENT_INSTALLED_APP_GET) return null
+        val items = root.optJSONObject("data")?.optJSONArray("data") ?: return emptyList()
+        val apps = ArrayList<InstalledApp>(items.length())
+        for (i in 0 until items.length()) {
+            val item = items.optJSONObject(i) ?: continue
+            val appId = item.optString("appId").takeIf { it.isNotEmpty() } ?: continue
+            val name = item.optString("name").takeIf { it.isNotEmpty() } ?: appId
+            val appType = if (item.has("app_type") && !item.isNull("app_type")) {
+                item.optInt("app_type")
+            } else {
+                null
+            }
+            val icon = item.optString("icon").takeIf { it.isNotEmpty() }
+            apps.add(InstalledApp(appId = appId, name = name, appType = appType, iconPath = icon))
+        }
+        return apps
     }
 
     /**

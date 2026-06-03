@@ -80,6 +80,7 @@ import com.factory.samsungremote.data.registry.AppShortcutCatalog
 import com.factory.samsungremote.data.registry.RemoteKey
 import com.factory.samsungremote.data.registry.RemoteKeyCatalog
 import com.factory.samsungremote.network.discovery.DiscoveredTv
+import com.factory.samsungremote.network.protocol.InstalledApp
 import com.factory.samsungremote.network.session.ConnectionState
 import com.factory.samsungremote.viewmodel.RemoteIntent
 import com.factory.samsungremote.viewmodel.RemoteViewModel
@@ -189,6 +190,36 @@ private val PrimeColor = Color(0xFF00A8E1)
 private val DisneyColor = Color(0xFF113CCF)
 private val YouTubeColor = Color(0xFFFF0000)
 
+/** Neutral badge color for discovered apps without a known brand accent. */
+private val GenericAppColor = Color(0xFF5B6470)
+
+/**
+ * Resolves the app id to launch for a curated [shortcut] against the TV's
+ * [installed] app list: prefer an entry whose id already matches, else match by
+ * name (exact, then containment), falling back to the catalog id when discovery
+ * hasn't run or the app isn't present. This is what makes the curated buttons
+ * work across TV models whose ids differ (ADR-0010).
+ */
+private fun resolveAppId(shortcut: AppShortcut, installed: List<InstalledApp>): String {
+    if (installed.isEmpty()) return shortcut.appId
+    val match = installed.firstOrNull { it.appId == shortcut.appId }
+        ?: installed.firstOrNull { it.name.equals(shortcut.name, ignoreCase = true) }
+        ?: installed.firstOrNull {
+            it.name.contains(shortcut.name, ignoreCase = true) ||
+                shortcut.name.contains(it.name, ignoreCase = true)
+        }
+    return match?.appId ?: shortcut.appId
+}
+
+/** Brand accent for a discovered [app] when its name matches a known service. */
+private fun accentFor(app: InstalledApp): Color = when {
+    app.name.contains("netflix", ignoreCase = true) -> NetflixColor
+    app.name.contains("prime", ignoreCase = true) -> PrimeColor
+    app.name.contains("disney", ignoreCase = true) -> DisneyColor
+    app.name.contains("youtube", ignoreCase = true) -> YouTubeColor
+    else -> GenericAppColor
+}
+
 /**
  * Remote-control entry point: binds the [RemoteViewModel] to the stateless
  * [RemoteScreen] and opens the control connection to the chosen TV.
@@ -207,10 +238,12 @@ fun RemoteRoute(
     LaunchedEffect(tv.id, token) { viewModel.connect(tv, token) }
 
     val connectionState by viewModel.connectionState.collectAsState()
+    val installedApps by viewModel.installedApps.collectAsState()
     RemoteScreen(
         onIntent = { viewModel.onIntent(it) },
         tvName = tv.name,
         connectionState = connectionState,
+        installedApps = installedApps,
         modifier = modifier,
     )
 }
@@ -232,6 +265,9 @@ fun RemoteRoute(
  *                        returns `true` when the frame reached an open connection.
  * @param tvName          Name of the connected TV for the header; `null` → generic title.
  * @param connectionState Current session state, surfaced as a colored status dot.
+ * @param installedApps   Apps discovered on the connected TV (ADR-0010). Used to
+ *                        resolve the curated shortcuts' real app ids and to render
+ *                        the "all apps" list; empty until discovery completes.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -240,13 +276,21 @@ fun RemoteScreen(
     modifier: Modifier = Modifier,
     tvName: String? = null,
     connectionState: ConnectionState? = null,
+    installedApps: List<InstalledApp> = emptyList(),
 ) {
     val press: (RemoteKey) -> Unit = { onIntent(RemoteIntent.PressKey(it)) }
     val type: (String) -> Unit = { text -> onIntent(RemoteIntent.TypeText(text)) }
-    val launch: (AppShortcut) -> Unit = { shortcut ->
-        if (!onIntent(RemoteIntent.LaunchApp(shortcut.appId))) {
+    // Launch by a concrete id, falling back to Home navigation when the app can't
+    // be launched (e.g. not connected).
+    val launchById: (String) -> Unit = { appId ->
+        if (!onIntent(RemoteIntent.LaunchApp(appId))) {
             onIntent(RemoteIntent.PressKey(FallbackNavKey))
         }
+    }
+    // A curated shortcut launches the app id the TV actually reports for it (so the
+    // button works on any model), falling back to the catalog id before discovery.
+    val launch: (AppShortcut) -> Unit = { shortcut ->
+        launchById(resolveAppId(shortcut, installedApps))
     }
 
     Scaffold(
@@ -290,7 +334,14 @@ fun RemoteScreen(
             }
             VolumeChannelRow(onPress = press)
             SectionCard(title = "Media") { MediaRow(onPress = press) }
-            SectionCard(title = "Apps") { AppGrid(onLaunch = launch) }
+            SectionCard(title = "Favoritos") { AppGrid(onLaunch = launch) }
+            // Full list of apps the TV reports as installed (ADR-0010); appears once
+            // discovery completes so the user can open anything on this TV.
+            if (installedApps.isNotEmpty()) {
+                SectionCard(title = "Todos os apps da TV") {
+                    InstalledAppGrid(apps = installedApps, onLaunch = launchById)
+                }
+            }
             Spacer(Modifier.height(8.dp))
         }
     }
@@ -779,6 +830,41 @@ private fun AppGrid(
                 onClick = { onLaunch(AppYouTube) },
                 modifier = Modifier.weight(1f),
             )
+        }
+    }
+}
+
+/**
+ * The full list of apps the TV reported as installed (ADR-0010), laid out as the
+ * same launcher-style 2-column grid of [AppTile]s. Each tile launches the app by
+ * the id the TV itself reported, so it is always correct for that model. Known
+ * brands get their accent ([accentFor]); the rest get a neutral badge.
+ */
+@Composable
+private fun InstalledAppGrid(
+    apps: List<InstalledApp>,
+    onLaunch: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        apps.chunked(2).forEach { rowApps ->
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                rowApps.forEach { app ->
+                    AppTile(
+                        label = app.name,
+                        initial = app.name.take(1).uppercase(),
+                        accent = accentFor(app),
+                        tag = "remote_installed_${app.appId}",
+                        onClick = { onLaunch(app.appId) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+                // Keep a lone trailing tile at half width, aligned with the grid.
+                if (rowApps.size == 1) Spacer(Modifier.weight(1f))
+            }
         }
     }
 }

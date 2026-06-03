@@ -1,11 +1,11 @@
-"""Tests for task d7903bbe — Testes de contrato (versionados) do protocolo.
+﻿"""Tests for task d7903bbe â€” Testes de contrato (versionados) do protocolo.
 
 Acceptance criterion (this file): "Suite de contrato passa para todos os tipos
 de mensagem".
 
 What makes this a *versioned contract* suite
 --------------------------------------------
-The wire format is frozen in ``tests/contracts/tizen_protocol_v<N>.json`` — a
+The wire format is frozen in ``tests/contracts/tizen_protocol_v<N>.json`` â€” a
 golden snapshot of the exact JSON the ``protocol/`` layer must emit for every
 domain action, and exactly what the parser must extract from incoming TV
 messages. The architecture pins this responsibility explicitly: "Camada
@@ -17,7 +17,7 @@ the contract, drives the **real** ``TizenProtocol`` through a small Kotlin
 harness for *every* case in the file, and asserts each produced value equals the
 pinned ``expected``. Adding cases means editing only the JSON. A breaking
 protocol revision must land as a NEW versioned file (``..._v3.json``) rather than
-by mutating these snapshots — that is what "versionado" buys us.
+by mutating these snapshots â€” that is what "versionado" buys us.
 
 Strategy (mirrors test_tizen_protocol.py)
 -----------------------------------------
@@ -95,6 +95,8 @@ internal fun writeValue(sb: StringBuilder, value: Any?) {
 class JSONArray {
     val items = ArrayList<Any?>()
     fun put(value: Any?): JSONArray { items.add(value); return this }
+    fun length(): Int = items.size
+    fun optJSONObject(index: Int): JSONObject? = items.getOrNull(index) as? JSONObject
     override fun toString(): String {
         val sb = StringBuilder("[")
         for ((i, v) in items.withIndex()) { if (i > 0) sb.append(','); writeValue(sb, v) }
@@ -124,6 +126,8 @@ class JSONObject {
         return v.toString()
     }
     fun optJSONObject(name: String): JSONObject? = map[name] as? JSONObject
+    fun optJSONArray(name: String): JSONArray? = map[name] as? JSONArray
+    fun optInt(name: String, fallback: Int = 0): Int = (map[name] as? Int) ?: fallback
     internal fun putRaw(name: String, value: Any?) { map[name] = value }
     override fun toString(): String {
         val sb = StringBuilder("{")
@@ -329,7 +333,7 @@ def _compiler_classpath(tc):
 def _run_contract(tmp_path):
     tc = _toolchain()
     if tc["missing"]:
-        pytest.skip("toolchain/jars indisponíveis: " + ", ".join(tc["missing"]))
+        pytest.skip("toolchain/jars indisponÃ­veis: " + ", ".join(tc["missing"]))
     if not PROTOCOL_KT.is_file() or not MESSAGE_KT.is_file():
         pytest.fail(f"fontes do protocolo ausentes em {PROTO_DIR}")
     if not CONTRACT_FILE.is_file():
@@ -353,7 +357,7 @@ def _run_contract(tmp_path):
     ]
     cr = subprocess.run(compile_cmd, capture_output=True, text=True, timeout=600)
     assert cr.returncode == 0, (
-        "compilação do contrato falhou:\n" + (cr.stdout or "") + (cr.stderr or "")
+        "compilaÃ§Ã£o do contrato falhou:\n" + (cr.stdout or "") + (cr.stderr or "")
     )
 
     run_cp = os.pathsep.join([str(out), str(tc["stdlib"])])
@@ -362,7 +366,7 @@ def _run_contract(tmp_path):
         capture_output=True, text=True, timeout=120,
     )
     assert rr.returncode == 0, (
-        "execução do harness de contrato falhou:\n" + (rr.stdout or "") + (rr.stderr or "")
+        "execuÃ§Ã£o do harness de contrato falhou:\n" + (rr.stdout or "") + (rr.stderr or "")
     )
 
     produced = {}
@@ -390,7 +394,7 @@ def produced(tmp_path_factory):
 
 
 # --------------------------------------------------------------------------- #
-# Behavioural — the REAL protocol matches the versioned contract for every case.
+# Behavioural â€” the REAL protocol matches the versioned contract for every case.
 # --------------------------------------------------------------------------- #
 def _send_case_ids():
     with CONTRACT_FILE.open(encoding="utf-8") as fh:
@@ -446,11 +450,11 @@ def test_every_contract_case_was_exercised(produced, contract):
             missing.append(f"TOKEN/{name}")
         if spec["op"] == "parseEvent" and ("EVENT_NAME", name) not in produced:
             missing.append(f"EVENT/{name}")
-    assert not missing, "casos do contrato não exercitados: " + ", ".join(missing)
+    assert not missing, "casos do contrato nÃ£o exercitados: " + ", ".join(missing)
 
 
 # --------------------------------------------------------------------------- #
-# Structural — always run (no toolchain needed): the versioned contract itself.
+# Structural â€” always run (no toolchain needed): the versioned contract itself.
 # --------------------------------------------------------------------------- #
 def test_contract_file_present_and_versioned():
     assert CONTRACT_FILE.is_file(), f"contrato ausente: {CONTRACT_FILE}"
@@ -460,7 +464,7 @@ def test_contract_file_present_and_versioned():
     assert data.get("protocol") == "samsung-tizen-ws"
     # filename version must match the declared version (versionamento consistente)
     assert f"_v{data['version']}." in CONTRACT_FILE.name, (
-        "nome do arquivo deve refletir a versão do contrato"
+        "nome do arquivo deve refletir a versÃ£o do contrato"
     )
 
 
@@ -471,13 +475,13 @@ def test_contract_covers_all_message_types():
     parse_ops = {c["op"] for c in data["parse_cases"].values()}
     # frames de tecla, launchApp, texto
     assert {"sendKey", "launchApp", "sendText"} <= send_ops, (
-        f"contrato não cobre todos os tipos de envio: {send_ops}"
+        f"contrato nÃ£o cobre todos os tipos de envio: {send_ops}"
     )
     # parsing de token (e evento)
     assert {"parseToken", "parseEvent"} <= parse_ops, (
-        f"contrato não cobre o parsing esperado: {parse_ops}"
+        f"contrato nÃ£o cobre o parsing esperado: {parse_ops}"
     )
-    # cobre as três variantes de comando de tecla
+    # cobre as trÃªs variantes de comando de tecla
     commands = {
         c["args"].get("command")
         for c in data["send_cases"].values()

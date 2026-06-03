@@ -1,35 +1,35 @@
-"""Tests for task 30103d06 — Controles de volume, mute e canal (RemoteScreen).
+﻿"""Tests for task 30103d06 â€” Controles de volume, mute e canal (RemoteScreen).
 
-Botões VOL+/VOL-/MUTE e CH+/CH- adicionados à tela de controle, ligados ao
+BotÃµes VOL+/VOL-/MUTE e CH+/CH- adicionados Ã  tela de controle, ligados ao
 RemoteViewModel.
 
 Acceptance criteria verificado aqui:
-  **Teste de UI: cada botão envia o RemoteKey correto (KEY_VOLUP, KEY_VOLDOWN,
+  **Teste de UI: cada botÃ£o envia o RemoteKey correto (KEY_VOLUP, KEY_VOLDOWN,
   KEY_MUTE, KEY_CHUP, KEY_CHDOWN) via ViewModel fake.**
 
-Como o runtime Compose não roda na JVM desktop, provamos *comportamentalmente* o
-elo crítico exigido pelo aceite: para CADA um dos 5 novos controles, a tela
-resolve a tecla no ``RemoteKeyCatalog`` (pelos mesmos códigos ``KEY_*`` que a
+Como o runtime Compose nÃ£o roda na JVM desktop, provamos *comportamentalmente* o
+elo crÃ­tico exigido pelo aceite: para CADA um dos 5 novos controles, a tela
+resolve a tecla no ``RemoteKeyCatalog`` (pelos mesmos cÃ³digos ``KEY_*`` que a
 tela usa) e, roteada pelo ``RemoteViewModel`` REAL ligado a um transporte *fake*
 (gravador), produz exatamente o frame ``SendRemoteKey`` com o ``DataOfCmd``
-daquela tecla — e os 5 frames são distintos (nenhum botão fixado na tecla de
-outro). O comportamento "toque → intent" sobre o runtime Compose é coberto pelo
+daquela tecla â€” e os 5 frames sÃ£o distintos (nenhum botÃ£o fixado na tecla de
+outro). O comportamento "toque â†’ intent" sobre o runtime Compose Ã© coberto pelo
 teste de UI instrumentado real (ver ``test_compose_ui_test_authored``).
 
 Strategy
 --------
-Seguindo a convenção do repositório (executar o **código real** numa JVM desktop
-em vez de só inspecionar fontes — ver ``test_remote_screen.py`` /
+Seguindo a convenÃ§Ã£o do repositÃ³rio (executar o **cÃ³digo real** numa JVM desktop
+em vez de sÃ³ inspecionar fontes â€” ver ``test_remote_screen.py`` /
 ``test_remote_viewmodel.py``), compilamos os fontes Kotlin reais
 (``RemoteKeyCatalog`` + ``RemoteViewModel`` + ``CommandRepository`` +
 ``RemoteSession`` + modelos + ``TizenProtocol``) contra *shims* puros de
 ``javax.inject``, ``org.json``, ``androidx.lifecycle`` e ``dagger.hilt`` (mais
-``kotlinx-coroutines`` + ``okhttp``/``okio`` reais para construir a sessão). O
-harness percorre os 5 novos controles, resolve cada tecla no catálogo e a roteia
+``kotlinx-coroutines`` + ``okhttp``/``okio`` reais para construir a sessÃ£o). O
+harness percorre os 5 novos controles, resolve cada tecla no catÃ¡logo e a roteia
 pelo ViewModel real ligado a um ``CommandTransport`` *fake* que grava os frames.
 
-Se o toolchain Kotlin/JDK ou os jars não forem localizados nos caches do Gradle,
-os testes comportamentais dão ``skip``; as asserções estruturais sempre rodam.
+Se o toolchain Kotlin/JDK ou os jars nÃ£o forem localizados nos caches do Gradle,
+os testes comportamentais dÃ£o ``skip``; as asserÃ§Ãµes estruturais sempre rodam.
 """
 
 import os
@@ -99,7 +99,7 @@ def _key_frame(code: str) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# Shims — pure annotations, org.json, and the Android/Hilt symbols the
+# Shims â€” pure annotations, org.json, and the Android/Hilt symbols the
 # ViewModel links against. (Shared, verbatim, with test_remote_screen.py /
 # test_remote_viewmodel.py so the real ViewModel/repository/session link without
 # an Android runtime.)
@@ -160,6 +160,8 @@ internal fun writeValue(sb: StringBuilder, value: Any?) {
 class JSONArray {
     val items = ArrayList<Any?>()
     fun put(value: Any?): JSONArray { items.add(value); return this }
+    fun length(): Int = items.size
+    fun optJSONObject(index: Int): JSONObject? = items.getOrNull(index) as? JSONObject
     override fun toString(): String {
         val sb = StringBuilder("[")
         for ((i, v) in items.withIndex()) { if (i > 0) sb.append(','); writeValue(sb, v) }
@@ -188,6 +190,8 @@ class JSONObject {
         return v.toString()
     }
     fun optJSONObject(name: String): JSONObject? = map[name] as? JSONObject
+    fun optJSONArray(name: String): JSONArray? = map[name] as? JSONArray
+    fun optInt(name: String, fallback: Int = 0): Int = (map[name] as? Int) ?: fallback
     internal fun putRaw(name: String, value: Any?) { map[name] = value }
     override fun toString(): String {
         val sb = StringBuilder("{")
@@ -283,7 +287,7 @@ class JSONParser(private val s: String) {
 '''
 
 # --------------------------------------------------------------------------- #
-# Harness — reproduces what the volume/channel row does for every new control:
+# Harness â€” reproduces what the volume/channel row does for every new control:
 # resolve the RemoteKey from RemoteKeyCatalog (by the same KEY_* code the screen
 # uses) and route RemoteIntent.PressKey(key) through the REAL RemoteViewModel,
 # ligado a um transporte fake gravador. Emits "code|frame" per control.
@@ -415,13 +419,13 @@ def _parse_lines(stdout):
 
 
 # --------------------------------------------------------------------------- #
-# Behavioural fixture — compile real sources + harness, run once.
+# Behavioural fixture â€” compile real sources + harness, run once.
 # --------------------------------------------------------------------------- #
 @pytest.fixture(scope="module")
 def out(tmp_path_factory):
     tc = _toolchain()
     if tc["missing"]:
-        pytest.skip("toolchain/jars indisponíveis: " + ", ".join(tc["missing"]))
+        pytest.skip("toolchain/jars indisponÃ­veis: " + ", ".join(tc["missing"]))
     for s in REAL_SOURCES:
         if not s.is_file():
             pytest.fail(f"fonte ausente: {s}")
@@ -457,7 +461,7 @@ def out(tmp_path_factory):
     ]
     cr = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
     assert cr.returncode == 0, (
-        "compilação do harness volume/canal falhou:\n" + (cr.stdout or "") + (cr.stderr or "")
+        "compilaÃ§Ã£o do harness volume/canal falhou:\n" + (cr.stdout or "") + (cr.stderr or "")
     )
 
     run_cp = os.pathsep.join(str(p) for p in [out_dir, *link_libs])
@@ -466,30 +470,30 @@ def out(tmp_path_factory):
         capture_output=True, text=True, timeout=120,
     )
     assert run.returncode == 0, (
-        "execução do harness falhou:\n" + (run.stdout or "") + (run.stderr or "")
+        "execuÃ§Ã£o do harness falhou:\n" + (run.stdout or "") + (run.stderr or "")
     )
     return _parse_lines(run.stdout)
 
 
 # --------------------------------------------------------------------------- #
-# Acceptance — each NEW button routes to the correct intent/frame (with fake).
+# Acceptance â€” each NEW button routes to the correct intent/frame (with fake).
 # --------------------------------------------------------------------------- #
 @pytest.mark.parametrize("_tag,code", CONTROLS)
 def test_each_control_routes_to_its_key(out, _tag, code):
     # The catalog lookup the screen performs must resolve (not <<MISSING>>)...
     frame = out.get(code)
-    assert frame is not None, f"harness não emitiu o controle {code}: {out!r}"
+    assert frame is not None, f"harness nÃ£o emitiu o controle {code}: {out!r}"
     assert frame != "<<MISSING>>", f"tecla {code} ausente no RemoteKeyCatalog"
     # ...and pressing it emits exactly the SendRemoteKey frame for that code.
     assert frame == _key_frame(code), (
-        f"controle {code} não roteou o frame correto: {frame!r}"
+        f"controle {code} nÃ£o roteou o frame correto: {frame!r}"
     )
 
 
 def test_all_five_controls_emit_distinct_frames(out):
     frames = [out.get(code) for _tag, code in CONTROLS]
     assert all(f and f != "<<MISSING>>" for f in frames), f"controle faltando: {frames!r}"
-    # No control is hard-coded to another's key — 5 controls, 5 distinct frames.
+    # No control is hard-coded to another's key â€” 5 controls, 5 distinct frames.
     assert len(set(frames)) == len(CONTROLS), f"frames duplicados entre controles: {frames!r}"
 
 
@@ -499,7 +503,7 @@ def test_each_press_forwards_exactly_one_frame(out):
 
 
 # --------------------------------------------------------------------------- #
-# Structural — the Compose screen wiring (always run, no toolchain required).
+# Structural â€” the Compose screen wiring (always run, no toolchain required).
 # --------------------------------------------------------------------------- #
 def test_screen_present():
     assert SCREEN_KT.is_file(), f"RemoteScreen ausente: {SCREEN_KT}"
@@ -509,7 +513,7 @@ def test_screen_defines_test_tags_for_every_new_control():
     text = _read(SCREEN_KT)
     for tag, _code in CONTROLS:
         assert tag in text, f"test tag '{tag}' ausente na tela"
-    assert "testTag" in text, "os controles devem expor testTags estáveis"
+    assert "testTag" in text, "os controles devem expor testTags estÃ¡veis"
 
 
 def test_screen_resolves_each_control_from_catalog_by_code():
@@ -518,7 +522,7 @@ def test_screen_resolves_each_control_from_catalog_by_code():
     text = _read(SCREEN_KT)
     assert "RemoteKeyCatalog" in text, "a tela deve resolver teclas via RemoteKeyCatalog"
     for _tag, code in CONTROLS:
-        assert code in text, f"código {code} não referenciado pela tela"
+        assert code in text, f"cÃ³digo {code} nÃ£o referenciado pela tela"
 
 
 def test_screen_emits_press_key_intents_for_controls():
@@ -526,17 +530,17 @@ def test_screen_emits_press_key_intents_for_controls():
     assert "RemoteIntent.PressKey" in text, "cada controle deve emitir RemoteIntent.PressKey"
     # The volume/channel controls are wired to their resolved keys.
     for key_ident in ("KeyVolUp", "KeyVolDown", "KeyMute", "KeyChUp", "KeyChDown"):
-        assert key_ident in text, f"controle ligado à tecla {key_ident} ausente na tela"
+        assert key_ident in text, f"controle ligado Ã  tecla {key_ident} ausente na tela"
 
 
 def test_catalog_contains_every_required_key():
     text = _read(REMOTE_KEY_CATALOG_KT)
     for _tag, code in CONTROLS:
-        assert f'"{code}"' in text, f"catálogo não define a tecla {code}"
+        assert f'"{code}"' in text, f"catÃ¡logo nÃ£o define a tecla {code}"
 
 
 # --------------------------------------------------------------------------- #
-# Criterion (UI) — the instrumented Compose UI test artifact exists and is real.
+# Criterion (UI) â€” the instrumented Compose UI test artifact exists and is real.
 # --------------------------------------------------------------------------- #
 def test_compose_ui_test_authored():
     assert UI_TEST_KT.is_file(), f"teste de UI Compose ausente: {UI_TEST_KT}"

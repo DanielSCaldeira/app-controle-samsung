@@ -1,43 +1,43 @@
-"""Tests for task 87a57356 — RemoteViewModel.
+﻿"""Tests for task 87a57356 â€” RemoteViewModel.
 
 Acceptance criteria verified here (behaviourally):
-  1. **Toques → intents → CommandRepository.** Ao receber um intent de tecla
+  1. **Toques â†’ intents â†’ CommandRepository.** Ao receber um intent de tecla
      (``RemoteIntent.PressKey``) o ViewModel chama ``CommandRepository.sendKey``
      com o ``RemoteKey`` correto. Provamos isso compilando o ``RemoteViewModel``
      REAL contra o ``CommandRepository`` REAL ligado a um ``CommandTransport``
      *fake* que grava cada frame: o frame resultante carrega exatamente o
-     ``code`` da tecla pressionada (``KEY_VOLUP`` e depois ``KEY_HOME`` — provando
-     que o mapeamento não é hardcoded). Os intents ``TypeText``/``LaunchApp``
-     também são roteados às chamadas de domínio correspondentes, e o booleano do
-     transporte (ex.: "não conectado") é propagado de volta pelo ViewModel.
-  2. **Estado da sessão → StateFlow exposto.** ``RemoteViewModel.connectionState``
-     reexpõe o ``StateFlow<ConnectionState>`` do ``RemoteSession`` (a única fonte
+     ``code`` da tecla pressionada (``KEY_VOLUP`` e depois ``KEY_HOME`` â€” provando
+     que o mapeamento nÃ£o Ã© hardcoded). Os intents ``TypeText``/``LaunchApp``
+     tambÃ©m sÃ£o roteados Ã s chamadas de domÃ­nio correspondentes, e o booleano do
+     transporte (ex.: "nÃ£o conectado") Ã© propagado de volta pelo ViewModel.
+  2. **Estado da sessÃ£o â†’ StateFlow exposto.** ``RemoteViewModel.connectionState``
+     reexpÃµe o ``StateFlow<ConnectionState>`` do ``RemoteSession`` (a Ãºnica fonte
      de verdade, ADR-0003). Dirigindo um ``RemoteSession`` REAL em tempo virtual
-     (via um ``WebSocket.Factory`` *fake*), provamos que cada transição da sessão
-     (Disconnected → Connecting/Connected → Reconnecting → Connected →
-     Disconnected) aparece imediatamente em ``vm.connectionState`` — é, de fato,
+     (via um ``WebSocket.Factory`` *fake*), provamos que cada transiÃ§Ã£o da sessÃ£o
+     (Disconnected â†’ Connecting/Connected â†’ Reconnecting â†’ Connected â†’
+     Disconnected) aparece imediatamente em ``vm.connectionState`` â€” Ã©, de fato,
      o mesmo ``StateFlow``.
 
 Strategy
 --------
-Seguindo a convenção do repositório (executar o **código real** numa JVM desktop
-em vez de só inspecionar fontes), compilamos os fontes Kotlin reais
+Seguindo a convenÃ§Ã£o do repositÃ³rio (executar o **cÃ³digo real** numa JVM desktop
+em vez de sÃ³ inspecionar fontes), compilamos os fontes Kotlin reais
 (``RemoteViewModel`` + ``CommandRepository`` + ``RemoteSession`` + modelos +
 ``TizenProtocol``) contra:
 
   * *shims* puros de ``javax.inject``, ``org.json`` (serializador compacto, ordem
-    de inserção), ``androidx.lifecycle.ViewModel`` e
+    de inserÃ§Ã£o), ``androidx.lifecycle.ViewModel`` e
     ``dagger.hilt.android.lifecycle.HiltViewModel``; e
-  * ``kotlinx-coroutines-test`` + ``okhttp``/``okio`` reais, para acionar a sessão
-    em tempo virtual com um socket *fake* (mesmo ponto de extensão do design:
+  * ``kotlinx-coroutines-test`` + ``okhttp``/``okio`` reais, para acionar a sessÃ£o
+    em tempo virtual com um socket *fake* (mesmo ponto de extensÃ£o do design:
     ``socketFactory: WebSocket.Factory``).
 
-O critério 1 usa um ``CommandTransport`` *fake* (no papel do ``RemoteSession``
-mockado) que grava os frames enviados pela cadeia ViewModel → Repository →
-Transport. O critério 2 dirige a sessão real e observa ``vm.connectionState``.
+O critÃ©rio 1 usa um ``CommandTransport`` *fake* (no papel do ``RemoteSession``
+mockado) que grava os frames enviados pela cadeia ViewModel â†’ Repository â†’
+Transport. O critÃ©rio 2 dirige a sessÃ£o real e observa ``vm.connectionState``.
 
-Se o toolchain Kotlin/JDK ou os jars não forem localizados nos caches do Gradle,
-os testes comportamentais dão ``skip``; as asserções estruturais sempre rodam.
+Se o toolchain Kotlin/JDK ou os jars nÃ£o forem localizados nos caches do Gradle,
+os testes comportamentais dÃ£o ``skip``; as asserÃ§Ãµes estruturais sempre rodam.
 """
 
 import base64
@@ -105,7 +105,7 @@ EXPECTED_APP_FRAME = (
 
 
 # --------------------------------------------------------------------------- #
-# Shims — pure annotations, org.json, and the Android/Hilt symbols the
+# Shims â€” pure annotations, org.json, and the Android/Hilt symbols the
 # ViewModel links against (it extends ViewModel and is annotated @HiltViewModel,
 # but never uses viewModelScope, so a minimal ViewModel stand-in suffices).
 # --------------------------------------------------------------------------- #
@@ -165,6 +165,8 @@ internal fun writeValue(sb: StringBuilder, value: Any?) {
 class JSONArray {
     val items = ArrayList<Any?>()
     fun put(value: Any?): JSONArray { items.add(value); return this }
+    fun length(): Int = items.size
+    fun optJSONObject(index: Int): JSONObject? = items.getOrNull(index) as? JSONObject
     override fun toString(): String {
         val sb = StringBuilder("[")
         for ((i, v) in items.withIndex()) { if (i > 0) sb.append(','); writeValue(sb, v) }
@@ -193,6 +195,8 @@ class JSONObject {
         return v.toString()
     }
     fun optJSONObject(name: String): JSONObject? = map[name] as? JSONObject
+    fun optJSONArray(name: String): JSONArray? = map[name] as? JSONArray
+    fun optInt(name: String, fallback: Int = 0): Int = (map[name] as? Int) ?: fallback
     internal fun putRaw(name: String, value: Any?) { map[name] = value }
     override fun toString(): String {
         val sb = StringBuilder("{")
@@ -288,7 +292,7 @@ class JSONParser(private val s: String) {
 '''
 
 # --------------------------------------------------------------------------- #
-# Harness — drives the REAL RemoteViewModel: criterion 1 via a recording
+# Harness â€” drives the REAL RemoteViewModel: criterion 1 via a recording
 # transport, criterion 2 via a real RemoteSession in virtual time.
 # --------------------------------------------------------------------------- #
 HARNESS_KT = r'''import com.factory.samsungremote.data.registry.KeyCategory
@@ -521,13 +525,13 @@ def _parse_kv(stdout):
 
 
 # --------------------------------------------------------------------------- #
-# Behavioural fixture — compile real sources + harness, run once.
+# Behavioural fixture â€” compile real sources + harness, run once.
 # --------------------------------------------------------------------------- #
 @pytest.fixture(scope="module")
 def out(tmp_path_factory):
     tc = _toolchain()
     if tc["missing"]:
-        pytest.skip("toolchain/jars indisponíveis: " + ", ".join(tc["missing"]))
+        pytest.skip("toolchain/jars indisponÃ­veis: " + ", ".join(tc["missing"]))
     for s in REAL_SOURCES:
         if not s.is_file():
             pytest.fail(f"fonte ausente: {s}")
@@ -563,7 +567,7 @@ def out(tmp_path_factory):
     ]
     cr = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
     assert cr.returncode == 0, (
-        "compilação do RemoteViewModel harness falhou:\n" + (cr.stdout or "") + (cr.stderr or "")
+        "compilaÃ§Ã£o do RemoteViewModel harness falhou:\n" + (cr.stdout or "") + (cr.stderr or "")
     )
 
     run_cp = os.pathsep.join(str(p) for p in [out_dir, *link_libs])
@@ -572,26 +576,26 @@ def out(tmp_path_factory):
         capture_output=True, text=True, timeout=120,
     )
     assert run.returncode == 0, (
-        "execução do harness falhou:\n" + (run.stdout or "") + (run.stderr or "")
+        "execuÃ§Ã£o do harness falhou:\n" + (run.stdout or "") + (run.stderr or "")
     )
     return _parse_kv(run.stdout)
 
 
 # --------------------------------------------------------------------------- #
-# Criterion 1 — a key intent calls CommandRepository.sendKey with the right key.
+# Criterion 1 â€” a key intent calls CommandRepository.sendKey with the right key.
 # --------------------------------------------------------------------------- #
 def test_key_intent_routes_to_send_key_with_correct_key(out):
     assert out.get("A_key_ret") == "true"
     assert out.get("A_key_frame") == EXPECTED_VOLUP_FRAME, (
-        f"intent de tecla não roteou o RemoteKey correto: {out.get('A_key_frame')!r}"
+        f"intent de tecla nÃ£o roteou o RemoteKey correto: {out.get('A_key_frame')!r}"
     )
 
 
 def test_key_mapping_is_not_hardcoded(out):
-    # Outra tecla deve produzir outro code — prova que o ViewModel encaminha o
-    # RemoteKey recebido, e não um valor fixo.
+    # Outra tecla deve produzir outro code â€” prova que o ViewModel encaminha o
+    # RemoteKey recebido, e nÃ£o um valor fixo.
     assert out.get("A_key2_frame") == EXPECTED_HOME_FRAME, (
-        f"segunda tecla não roteou KEY_HOME: {out.get('A_key2_frame')!r}"
+        f"segunda tecla nÃ£o roteou KEY_HOME: {out.get('A_key2_frame')!r}"
     )
     assert out.get("A_key_frame") != out.get("A_key2_frame")
 
@@ -603,13 +607,13 @@ def test_press_key_convenience_routes_same_as_intent(out):
 
 def test_type_text_intent_routes_to_send_text(out):
     assert out.get("A_text_frame") == EXPECTED_TEXT_FRAME, (
-        f"intent de texto não roteou sendText: {out.get('A_text_frame')!r}"
+        f"intent de texto nÃ£o roteou sendText: {out.get('A_text_frame')!r}"
     )
 
 
 def test_launch_app_intent_routes_to_launch_app(out):
     assert out.get("A_app_frame") == EXPECTED_APP_FRAME, (
-        f"intent de app não roteou launchApp: {out.get('A_app_frame')!r}"
+        f"intent de app nÃ£o roteou launchApp: {out.get('A_app_frame')!r}"
     )
 
 
@@ -620,18 +624,18 @@ def test_each_intent_forwards_exactly_one_frame(out):
 
 def test_viewmodel_propagates_not_connected_result(out):
     # Transporte offline -> repository retorna false -> ViewModel propaga false,
-    # mas o frame ainda é entregue (sem exceção no caminho de controle).
+    # mas o frame ainda Ã© entregue (sem exceÃ§Ã£o no caminho de controle).
     assert out.get("A_offline_ret") == "false"
     assert out.get("A_offline_count") == "1"
     assert out.get("A_offline_frame") == EXPECTED_VOLUP_FRAME
 
 
 # --------------------------------------------------------------------------- #
-# Criterion 2 — session state changes are reflected in the exposed StateFlow.
+# Criterion 2 â€” session state changes are reflected in the exposed StateFlow.
 # --------------------------------------------------------------------------- #
 def test_connection_state_is_the_session_stateflow(out):
     assert out.get("B_same_instance") == "true", (
-        "connectionState deve ser o próprio StateFlow do RemoteSession"
+        "connectionState deve ser o prÃ³prio StateFlow do RemoteSession"
     )
 
 
@@ -641,13 +645,13 @@ def test_initial_state_reflects_disconnected(out):
 
 def test_connect_reflects_connected_state(out):
     assert out.get("B_after_connect") == "Connected", (
-        f"conexão não refletiu Connected no StateFlow exposto: {out!r}"
+        f"conexÃ£o nÃ£o refletiu Connected no StateFlow exposto: {out!r}"
     )
 
 
 def test_drop_reflects_reconnecting_state(out):
     assert out.get("B_after_drop", "").startswith("Reconnecting"), (
-        f"queda não refletiu Reconnecting: {out.get('B_after_drop')!r}"
+        f"queda nÃ£o refletiu Reconnecting: {out.get('B_after_drop')!r}"
     )
 
 
@@ -669,7 +673,7 @@ def test_sources_present():
 def test_viewmodel_is_hilt_viewmodel_with_injected_deps():
     text = _read(VIEWMODEL_KT)
     assert "@HiltViewModel" in text, "ViewModel deve ser um @HiltViewModel"
-    assert "@Inject constructor" in text, "deve receber dependências via @Inject"
+    assert "@Inject constructor" in text, "deve receber dependÃªncias via @Inject"
     assert "commandRepository: CommandRepository" in text
     assert "session: RemoteSession" in text
 
@@ -684,5 +688,5 @@ def test_viewmodel_maps_intents_to_repository():
 
 def test_viewmodel_exposes_session_state_as_stateflow():
     text = _read(VIEWMODEL_KT)
-    assert "StateFlow<ConnectionState>" in text, "deve expor um StateFlow do estado da sessão"
+    assert "StateFlow<ConnectionState>" in text, "deve expor um StateFlow do estado da sessÃ£o"
     assert "session.state" in text, "deve reexpor o StateFlow do RemoteSession"

@@ -1,12 +1,12 @@
-"""Tests for task 4211c776 — CommandRepository: API de domínio.
+﻿"""Tests for task 4211c776 â€” CommandRepository: API de domÃ­nio.
 
 Acceptance criteria verified here (behaviourally):
-  **Teste unitário com RemoteSession mockado confirma que sendKey/launchApp/
+  **Teste unitÃ¡rio com RemoteSession mockado confirma que sendKey/launchApp/
   sendText invocam o transporte com a mensagem JSON correta para cada caso.**
 
 ``CommandRepository`` depende apenas da costura ``CommandTransport`` (que o
-``RemoteSession`` de produção implementa — ver ``RemoteSession : CommandTransport``).
-Substituímos o transporte por um *fake* que registra exatamente os frames
+``RemoteSession`` de produÃ§Ã£o implementa â€” ver ``RemoteSession : CommandTransport``).
+SubstituÃ­mos o transporte por um *fake* que registra exatamente os frames
 recebidos. Assim provamos, sem rede, que:
 
   * ``sendKey(RemoteKey)``   -> ``ms.remote.control`` / ``SendRemoteKey`` com o
@@ -16,23 +16,23 @@ recebidos. Assim provamos, sem rede, que:
   * ``launchApp(appId)``     -> ``ms.channel.emit`` / ``ed.apps.launch`` com o
     ``appId`` no ``data``.
 
-E que o repositório **propaga** o booleano do transporte (ex.: ``false`` quando
-não há conexão) sem engolir o frame.
+E que o repositÃ³rio **propaga** o booleano do transporte (ex.: ``false`` quando
+nÃ£o hÃ¡ conexÃ£o) sem engolir o frame.
 
 Strategy
 --------
-Seguindo a convenção do repositório (executar o **código real** numa JVM desktop
-em vez de só inspecionar fontes), compilamos os fontes Kotlin reais
+Seguindo a convenÃ§Ã£o do repositÃ³rio (executar o **cÃ³digo real** numa JVM desktop
+em vez de sÃ³ inspecionar fontes), compilamos os fontes Kotlin reais
 (``CommandRepository`` + ``CommandTransport`` + ``TizenProtocol`` + ``TizenMessage``
 + ``RemoteKey``) contra *shims* puros de ``javax.inject`` e ``org.json`` (mesma
-semântica do serializador: ``toString()`` compacto, ordem de inserção). O
-``java.util.Base64`` usado por ``TizenProtocol.sendText`` é o real da JDK.
+semÃ¢ntica do serializador: ``toString()`` compacto, ordem de inserÃ§Ã£o). O
+``java.util.Base64`` usado por ``TizenProtocol.sendText`` Ã© o real da JDK.
 
 Um ``CommandTransport`` *fake* (no papel do ``RemoteSession`` mockado) captura os
-frames enviados e o booleano de retorno é controlado por construção.
+frames enviados e o booleano de retorno Ã© controlado por construÃ§Ã£o.
 
-Se o toolchain Kotlin/JDK não for localizado nos caches do Gradle, os testes
-comportamentais dão ``skip``; as asserções estruturais sempre rodam.
+Se o toolchain Kotlin/JDK nÃ£o for localizado nos caches do Gradle, os testes
+comportamentais dÃ£o ``skip``; as asserÃ§Ãµes estruturais sempre rodam.
 """
 
 import base64
@@ -82,7 +82,7 @@ def _read(path: Path) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# Shims — pure annotations + org.json (compact toString, insertion order).
+# Shims â€” pure annotations + org.json (compact toString, insertion order).
 # --------------------------------------------------------------------------- #
 INJECT_SHIM = r'''package javax.inject
 
@@ -126,6 +126,8 @@ internal fun writeValue(sb: StringBuilder, value: Any?) {
 class JSONArray {
     val items = ArrayList<Any?>()
     fun put(value: Any?): JSONArray { items.add(value); return this }
+    fun length(): Int = items.size
+    fun optJSONObject(index: Int): JSONObject? = items.getOrNull(index) as? JSONObject
     override fun toString(): String {
         val sb = StringBuilder("[")
         for ((i, v) in items.withIndex()) { if (i > 0) sb.append(','); writeValue(sb, v) }
@@ -154,6 +156,8 @@ class JSONObject {
         return v.toString()
     }
     fun optJSONObject(name: String): JSONObject? = map[name] as? JSONObject
+    fun optJSONArray(name: String): JSONArray? = map[name] as? JSONArray
+    fun optInt(name: String, fallback: Int = 0): Int = (map[name] as? Int) ?: fallback
     internal fun putRaw(name: String, value: Any?) { map[name] = value }
     override fun toString(): String {
         val sb = StringBuilder("{")
@@ -249,7 +253,7 @@ class JSONParser(private val s: String) {
 '''
 
 # --------------------------------------------------------------------------- #
-# Harness — drives the REAL CommandRepository through a fake transport.
+# Harness â€” drives the REAL CommandRepository through a fake transport.
 # --------------------------------------------------------------------------- #
 HARNESS_KT = r'''import com.factory.samsungremote.data.registry.KeyCategory
 import com.factory.samsungremote.data.registry.RemoteKey
@@ -370,13 +374,13 @@ def _parse_kv(stdout):
 
 
 # --------------------------------------------------------------------------- #
-# Behavioural fixture — compile real sources + harness, run once.
+# Behavioural fixture â€” compile real sources + harness, run once.
 # --------------------------------------------------------------------------- #
 @pytest.fixture(scope="module")
 def out(tmp_path_factory):
     tc = _toolchain()
     if tc["missing"]:
-        pytest.skip("toolchain/jars indisponíveis: " + ", ".join(tc["missing"]))
+        pytest.skip("toolchain/jars indisponÃ­veis: " + ", ".join(tc["missing"]))
     for s in REAL_SOURCES:
         if not s.is_file():
             pytest.fail(f"fonte ausente: {s}")
@@ -407,7 +411,7 @@ def out(tmp_path_factory):
     ]
     cr = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
     assert cr.returncode == 0, (
-        "compilação do CommandRepository falhou:\n" + (cr.stdout or "") + (cr.stderr or "")
+        "compilaÃ§Ã£o do CommandRepository falhou:\n" + (cr.stdout or "") + (cr.stderr or "")
     )
 
     run_cp = os.pathsep.join(str(p) for p in [out_dir, tc["stdlib"]])
@@ -416,13 +420,13 @@ def out(tmp_path_factory):
         capture_output=True, text=True, timeout=120,
     )
     assert run.returncode == 0, (
-        "execução do harness falhou:\n" + (run.stdout or "") + (run.stderr or "")
+        "execuÃ§Ã£o do harness falhou:\n" + (run.stdout or "") + (run.stderr or "")
     )
     return _parse_kv(run.stdout)
 
 
 # --------------------------------------------------------------------------- #
-# Behavioural — each domain call invokes the transport with the right JSON.
+# Behavioural â€” each domain call invokes the transport with the right JSON.
 # --------------------------------------------------------------------------- #
 def test_send_key_invokes_transport_with_correct_json(out):
     assert out.get("KEY_ret") == "true"
@@ -451,7 +455,7 @@ def test_each_call_forwards_exactly_one_frame(out):
 
 
 def test_repository_propagates_transport_failure(out):
-    # Sem conexão, o transporte retorna false; o repositório propaga sem engolir.
+    # Sem conexÃ£o, o transporte retorna false; o repositÃ³rio propaga sem engolir.
     assert out.get("DISC_ret") == "false"
     assert out.get("DISC_count") == "1", "o frame deve ser entregue ao transporte mesmo offline"
     assert out.get("DISC_frame", "").startswith('{"method":"ms.remote.control"')

@@ -1,28 +1,28 @@
-"""Tests for task 38eb3b28 — Teclas de atalho de streaming.
+﻿"""Tests for task 38eb3b28 â€” Teclas de atalho de streaming.
 
-Atalhos dedicados (Netflix / Prime Video / Disney+ / YouTube) adicionados à tela
+Atalhos dedicados (Netflix / Prime Video / Disney+ / YouTube) adicionados Ã  tela
 de controle. Cada atalho chama ``CommandRepository.launchApp(appId)`` (via
 ``RemoteIntent.LaunchApp`` no ``RemoteViewModel``) para o ``appId`` resolvido do
-``AppShortcutCatalog``; quando o launch não chega a uma conexão aberta, a tela
-faz *fallback* para navegação por tecla (``KEY_HOME``).
+``AppShortcutCatalog``; quando o launch nÃ£o chega a uma conexÃ£o aberta, a tela
+faz *fallback* para navegaÃ§Ã£o por tecla (``KEY_HOME``).
 
 Acceptance criteria verificado aqui:
   **Teste de UI: tocar o atalho Netflix invoca ``launchApp('3201907018807')`` no
   ViewModel fake; os 4 atalhos disparam o ``appId`` correto; fallback acionado
   quando ``launchApp`` falha.**
 
-Como o runtime Compose não roda na JVM desktop, provamos *comportamentalmente* o
-elo crítico exigido pelo aceite (seguindo a convenção do repositório —
+Como o runtime Compose nÃ£o roda na JVM desktop, provamos *comportamentalmente* o
+elo crÃ­tico exigido pelo aceite (seguindo a convenÃ§Ã£o do repositÃ³rio â€”
 ``test_remote_media_controls.py`` / ``test_remote_screen.py``): reproduzimos o
 *exato* handler ``launch`` da tela. Para cada um dos 4 atalhos, resolvemos o
 ``AppShortcut`` no ``AppShortcutCatalog`` (pelos mesmos ``appId`` que a tela usa)
 e roteamos ``RemoteIntent.LaunchApp(shortcut.appId)`` pelo ``RemoteViewModel``
-REAL ligado a um ``CommandTransport`` *fake* (gravador) — produzindo exatamente o
+REAL ligado a um ``CommandTransport`` *fake* (gravador) â€” produzindo exatamente o
 frame ``ms.channel.emit`` / ``ed.apps.launch`` para aquele ``appId``, e os 4
-frames são distintos. Para o *fallback*, o transporte fake reporta "não
-conectado" (``send`` → ``false``): o handler deve então emitir um
-``PressKey(KEY_HOME)`` após o ``LaunchApp`` que falhou. O comportamento "toque →
-intent" sobre o runtime Compose é coberto pelo teste de UI instrumentado real
+frames sÃ£o distintos. Para o *fallback*, o transporte fake reporta "nÃ£o
+conectado" (``send`` â†’ ``false``): o handler deve entÃ£o emitir um
+``PressKey(KEY_HOME)`` apÃ³s o ``LaunchApp`` que falhou. O comportamento "toque â†’
+intent" sobre o runtime Compose Ã© coberto pelo teste de UI instrumentado real
 (ver ``test_compose_ui_test_covers_shortcuts``).
 
 Strategy
@@ -31,12 +31,12 @@ Compilamos os fontes Kotlin reais (``AppShortcut`` + ``AppShortcutCatalog`` +
 ``RemoteKeyCatalog`` + ``RemoteViewModel`` + ``CommandRepository`` +
 ``RemoteSession`` + modelos + ``TizenProtocol``) contra *shims* puros de
 ``javax.inject``, ``org.json``, ``androidx.lifecycle`` e ``dagger.hilt`` (mais
-``kotlinx-coroutines`` + ``okhttp``/``okio`` reais para construir a sessão). O
+``kotlinx-coroutines`` + ``okhttp``/``okio`` reais para construir a sessÃ£o). O
 harness reproduz o handler ``launch`` da tela duas vezes: caminho feliz
-(conexão aberta) e caminho de falha (fallback).
+(conexÃ£o aberta) e caminho de falha (fallback).
 
-Se o toolchain Kotlin/JDK ou os jars não forem localizados nos caches do Gradle,
-os testes comportamentais dão ``skip``; as asserções estruturais sempre rodam.
+Se o toolchain Kotlin/JDK ou os jars nÃ£o forem localizados nos caches do Gradle,
+os testes comportamentais dÃ£o ``skip``; as asserÃ§Ãµes estruturais sempre rodam.
 """
 
 import os
@@ -120,7 +120,7 @@ def _key_frame(code: str) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# Shims — pure annotations, org.json, and the Android/Hilt symbols the
+# Shims â€” pure annotations, org.json, and the Android/Hilt symbols the
 # ViewModel links against. (Shared, verbatim, with test_remote_media_controls.py
 # so the real ViewModel/repository/session link without an Android runtime.)
 # --------------------------------------------------------------------------- #
@@ -180,6 +180,8 @@ internal fun writeValue(sb: StringBuilder, value: Any?) {
 class JSONArray {
     val items = ArrayList<Any?>()
     fun put(value: Any?): JSONArray { items.add(value); return this }
+    fun length(): Int = items.size
+    fun optJSONObject(index: Int): JSONObject? = items.getOrNull(index) as? JSONObject
     override fun toString(): String {
         val sb = StringBuilder("[")
         for ((i, v) in items.withIndex()) { if (i > 0) sb.append(','); writeValue(sb, v) }
@@ -208,6 +210,8 @@ class JSONObject {
         return v.toString()
     }
     fun optJSONObject(name: String): JSONObject? = map[name] as? JSONObject
+    fun optJSONArray(name: String): JSONArray? = map[name] as? JSONArray
+    fun optInt(name: String, fallback: Int = 0): Int = (map[name] as? Int) ?: fallback
     internal fun putRaw(name: String, value: Any?) { map[name] = value }
     override fun toString(): String {
         val sb = StringBuilder("{")
@@ -303,7 +307,7 @@ class JSONParser(private val s: String) {
 '''
 
 # --------------------------------------------------------------------------- #
-# Harness — reproduces the screen's exact `launch` handler:
+# Harness â€” reproduces the screen's exact `launch` handler:
 #
 #   val launch: (AppShortcut) -> Unit = { shortcut ->
 #       if (!onIntent(RemoteIntent.LaunchApp(shortcut.appId))) {
@@ -471,13 +475,13 @@ def _parse_lines(stdout):
 
 
 # --------------------------------------------------------------------------- #
-# Behavioural fixture — compile real sources + harness, run once.
+# Behavioural fixture â€” compile real sources + harness, run once.
 # --------------------------------------------------------------------------- #
 @pytest.fixture(scope="module")
 def out(tmp_path_factory):
     tc = _toolchain()
     if tc["missing"]:
-        pytest.skip("toolchain/jars indisponíveis: " + ", ".join(tc["missing"]))
+        pytest.skip("toolchain/jars indisponÃ­veis: " + ", ".join(tc["missing"]))
     for s in REAL_SOURCES:
         if not s.is_file():
             pytest.fail(f"fonte ausente: {s}")
@@ -513,7 +517,7 @@ def out(tmp_path_factory):
     ]
     cr = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
     assert cr.returncode == 0, (
-        "compilação do harness de atalhos falhou:\n" + (cr.stdout or "") + (cr.stderr or "")
+        "compilaÃ§Ã£o do harness de atalhos falhou:\n" + (cr.stdout or "") + (cr.stderr or "")
     )
 
     run_cp = os.pathsep.join(str(p) for p in [out_dir, *link_libs])
@@ -522,23 +526,23 @@ def out(tmp_path_factory):
         capture_output=True, text=True, timeout=120,
     )
     assert run.returncode == 0, (
-        "execução do harness falhou:\n" + (run.stdout or "") + (run.stderr or "")
+        "execuÃ§Ã£o do harness falhou:\n" + (run.stdout or "") + (run.stderr or "")
     )
     return _parse_lines(run.stdout)
 
 
 # --------------------------------------------------------------------------- #
-# Acceptance (behavioural) — each shortcut launches its app id (with fake).
+# Acceptance (behavioural) â€” each shortcut launches its app id (with fake).
 # --------------------------------------------------------------------------- #
 @pytest.mark.parametrize("_tag,app_id,_name", SHORTCUTS)
 def test_each_shortcut_launches_its_app_id(out, _tag, app_id, _name):
     # The catalog lookup the screen performs must resolve (not <<MISSING>>)...
     frame = out.get(f"LAUNCH_{app_id}")
-    assert frame is not None, f"harness não emitiu o atalho {app_id}: {out!r}"
+    assert frame is not None, f"harness nÃ£o emitiu o atalho {app_id}: {out!r}"
     assert frame != "<<MISSING>>", f"appId {app_id} ausente no AppShortcutCatalog"
     # ...and tapping it launches exactly that app id (ed.apps.launch frame).
     assert frame == _launch_frame(app_id), (
-        f"atalho {app_id} não roteou o launchApp correto: {frame!r}"
+        f"atalho {app_id} nÃ£o roteou o launchApp correto: {frame!r}"
     )
 
 
@@ -546,7 +550,7 @@ def test_netflix_shortcut_invokes_launch_app_3201907018807(out):
     # The acceptance criteria calls out Netflix explicitly.
     frame = out.get("LAUNCH_3201907018807")
     assert frame is not None and frame != "<<MISSING>>", (
-        f"atalho Netflix não emitido: {out!r}"
+        f"atalho Netflix nÃ£o emitido: {out!r}"
     )
     assert frame == _launch_frame("3201907018807"), (
         f"tocar Netflix deve invocar launchApp('3201907018807'): {frame!r}"
@@ -556,7 +560,7 @@ def test_netflix_shortcut_invokes_launch_app_3201907018807(out):
 def test_all_four_shortcuts_emit_distinct_app_frames(out):
     frames = [out.get(f"LAUNCH_{a}") for _t, a, _n in SHORTCUTS]
     assert all(f and f != "<<MISSING>>" for f in frames), f"atalho faltando: {frames!r}"
-    # No shortcut is hard-coded to another's appId — 4 shortcuts, 4 distinct frames.
+    # No shortcut is hard-coded to another's appId â€” 4 shortcuts, 4 distinct frames.
     assert len(set(frames)) == len(SHORTCUTS), f"frames duplicados entre atalhos: {frames!r}"
 
 
@@ -582,7 +586,7 @@ def test_fallback_to_home_key_when_launch_fails(out):
 
 
 # --------------------------------------------------------------------------- #
-# Structural — the Compose screen wiring (always run, no toolchain required).
+# Structural â€” the Compose screen wiring (always run, no toolchain required).
 # --------------------------------------------------------------------------- #
 def test_screen_present():
     assert SCREEN_KT.is_file(), f"RemoteScreen ausente: {SCREEN_KT}"
@@ -592,7 +596,7 @@ def test_screen_defines_test_tags_for_every_shortcut():
     text = _read(SCREEN_KT)
     for tag, _app_id, _name in SHORTCUTS:
         assert tag in text, f"test tag '{tag}' ausente na tela"
-    assert "testTag" in text, "os atalhos devem expor testTags estáveis"
+    assert "testTag" in text, "os atalhos devem expor testTags estÃ¡veis"
 
 
 def test_screen_uses_launch_app_intent():
@@ -606,7 +610,7 @@ def test_screen_resolves_shortcuts_from_catalog_by_app_id():
     text = _read(SCREEN_KT)
     assert "AppShortcutCatalog" in text, "a tela deve resolver atalhos via AppShortcutCatalog"
     for _tag, app_id, _name in SHORTCUTS:
-        assert app_id in text, f"appId {app_id} não referenciado pela tela"
+        assert app_id in text, f"appId {app_id} nÃ£o referenciado pela tela"
 
 
 def test_screen_falls_back_to_home_key_on_launch_failure():
@@ -623,11 +627,11 @@ def test_screen_falls_back_to_home_key_on_launch_failure():
 def test_catalog_contains_every_shortcut_app_id():
     text = _read(APP_SHORTCUT_CATALOG_KT)
     for _tag, app_id, _name in SHORTCUTS:
-        assert f'"{app_id}"' in text, f"catálogo não define o appId {app_id}"
+        assert f'"{app_id}"' in text, f"catÃ¡logo nÃ£o define o appId {app_id}"
 
 
 # --------------------------------------------------------------------------- #
-# Criterion (UI) — the instrumented Compose UI test artifact covers shortcuts.
+# Criterion (UI) â€” the instrumented Compose UI test artifact covers shortcuts.
 # --------------------------------------------------------------------------- #
 def test_compose_ui_test_covers_shortcuts():
     assert UI_TEST_KT.is_file(), f"teste de UI Compose ausente: {UI_TEST_KT}"
@@ -642,7 +646,7 @@ def test_compose_ui_test_covers_shortcuts():
     # Every streaming shortcut's tag must be exercised by the UI test.
     for tag, _app_id, _name in SHORTCUTS:
         assert f"RemoteTestTags.{tag}" in text, (
-            f"teste de UI não cobre o atalho {tag}"
+            f"teste de UI nÃ£o cobre o atalho {tag}"
         )
     # The fallback-on-failure branch must be exercised too.
     assert FALLBACK_CODE in text or "PressKey" in text, (

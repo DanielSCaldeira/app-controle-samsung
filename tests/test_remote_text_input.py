@@ -1,46 +1,46 @@
-"""Tests for task 6178558d — Entrada de texto (teclado da TV).
+﻿"""Tests for task 6178558d â€” Entrada de texto (teclado da TV).
 
-A tela de controle ganha um campo de texto + botão "Enviar" (``TextEntryRow``)
+A tela de controle ganha um campo de texto + botÃ£o "Enviar" (``TextEntryRow``)
 para digitar em campos de busca da TV. Ao submeter, a tela encaminha o texto a
 ``RemoteIntent.TypeText``, que o ``RemoteViewModel`` roteia para
-``CommandRepository.sendText`` — e a camada de protocolo codifica o texto em
+``CommandRepository.sendText`` â€” e a camada de protocolo codifica o texto em
 Base64 no frame ``SendInputString``.
 
 Acceptance criteria verificado aqui (comportamentalmente):
   **Teste: digitar texto e enviar resulta em ``sendText`` chamado com a string;
-  a mensagem serializada contém o texto em Base64 (teste de protocolo).**
+  a mensagem serializada contÃ©m o texto em Base64 (teste de protocolo).**
 
-Como o runtime Compose não roda na JVM desktop, provamos o elo crítico exigido
-pelo aceite seguindo a convenção do repositório (``test_remote_numeric_keypad.py``
+Como o runtime Compose nÃ£o roda na JVM desktop, provamos o elo crÃ­tico exigido
+pelo aceite seguindo a convenÃ§Ã£o do repositÃ³rio (``test_remote_numeric_keypad.py``
 / ``test_remote_viewmodel.py``): o harness reproduz EXATAMENTE o que o
-``TextEntryRow`` faz ao submeter —
+``TextEntryRow`` faz ao submeter â€”
 
     val submit = { if (text.isNotBlank()) { onSend(text); text = "" } }
 
-— roteando ``onSend`` por ``RemoteIntent.TypeText(text)`` através do
+â€” roteando ``onSend`` por ``RemoteIntent.TypeText(text)`` atravÃ©s do
 ``RemoteViewModel`` REAL ligado a um ``CommandTransport`` *fake* (gravador). Para
 cada entrada provamos que:
 
-  * o frame gravado é o ``ms.remote.control`` / ``SendInputString`` com o texto
-    **Base64** no ``Cmd`` (calculado de forma independente em Python — teste de
-    protocolo), inclusive para entradas com espaço e UTF-8 multibyte; e
-  * entrada **em branco** é ignorada (nenhum frame), exatamente como o gate
+  * o frame gravado Ã© o ``ms.remote.control`` / ``SendInputString`` com o texto
+    **Base64** no ``Cmd`` (calculado de forma independente em Python â€” teste de
+    protocolo), inclusive para entradas com espaÃ§o e UTF-8 multibyte; e
+  * entrada **em branco** Ã© ignorada (nenhum frame), exatamente como o gate
     ``isNotBlank()`` da tela.
 
-O comportamento "toque → intent" sobre o runtime Compose é coberto pela camada
-de UI instrumentada; aqui fixamos o contrato de domínio + protocolo.
+O comportamento "toque â†’ intent" sobre o runtime Compose Ã© coberto pela camada
+de UI instrumentada; aqui fixamos o contrato de domÃ­nio + protocolo.
 
 Strategy
 --------
 Compilamos os fontes Kotlin reais (``RemoteViewModel`` + ``CommandRepository`` +
 ``RemoteSession`` + modelos + ``TizenProtocol``) contra *shims* puros de
-``javax.inject``, ``org.json`` (serializador compacto, ordem de inserção),
+``javax.inject``, ``org.json`` (serializador compacto, ordem de inserÃ§Ã£o),
 ``androidx.lifecycle`` e ``dagger.hilt`` (mais ``kotlinx-coroutines`` +
-``okhttp``/``okio`` reais para construir a sessão). O ``java.util.Base64`` usado
-por ``TizenProtocol.sendText`` é o real da JDK.
+``okhttp``/``okio`` reais para construir a sessÃ£o). O ``java.util.Base64`` usado
+por ``TizenProtocol.sendText`` Ã© o real da JDK.
 
-Se o toolchain Kotlin/JDK ou os jars não forem localizados nos caches do Gradle,
-os testes comportamentais dão ``skip``; as asserções estruturais sempre rodam.
+Se o toolchain Kotlin/JDK ou os jars nÃ£o forem localizados nos caches do Gradle,
+os testes comportamentais dÃ£o ``skip``; as asserÃ§Ãµes estruturais sempre rodam.
 """
 
 import base64
@@ -86,9 +86,9 @@ def _read(path: Path) -> str:
 
 
 # ---- Text inputs under test + their independently-computed wire frames. -----
-# Cobrimos: palavra simples, frase com espaço (campo de busca), e UTF-8
-# multibyte (acentos) — provando que o Base64 é do texto exato submetido.
-TEXT_INPUTS = ["hello", "Game of Thrones", "café"]
+# Cobrimos: palavra simples, frase com espaÃ§o (campo de busca), e UTF-8
+# multibyte (acentos) â€” provando que o Base64 Ã© do texto exato submetido.
+TEXT_INPUTS = ["hello", "Game of Thrones", "cafÃ©"]
 BLANK_INPUT = "   "  # only-whitespace -> isNotBlank() == false -> ignored.
 
 
@@ -104,7 +104,7 @@ def _text_frame(text: str) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# Shims — pure annotations, org.json, and the Android/Hilt symbols the
+# Shims â€” pure annotations, org.json, and the Android/Hilt symbols the
 # ViewModel links against. (Shared, verbatim, with test_remote_viewmodel.py so
 # the real ViewModel/repository/session link without an Android runtime.)
 # --------------------------------------------------------------------------- #
@@ -164,6 +164,8 @@ internal fun writeValue(sb: StringBuilder, value: Any?) {
 class JSONArray {
     val items = ArrayList<Any?>()
     fun put(value: Any?): JSONArray { items.add(value); return this }
+    fun length(): Int = items.size
+    fun optJSONObject(index: Int): JSONObject? = items.getOrNull(index) as? JSONObject
     override fun toString(): String {
         val sb = StringBuilder("[")
         for ((i, v) in items.withIndex()) { if (i > 0) sb.append(','); writeValue(sb, v) }
@@ -192,6 +194,8 @@ class JSONObject {
         return v.toString()
     }
     fun optJSONObject(name: String): JSONObject? = map[name] as? JSONObject
+    fun optJSONArray(name: String): JSONArray? = map[name] as? JSONArray
+    fun optInt(name: String, fallback: Int = 0): Int = (map[name] as? Int) ?: fallback
     internal fun putRaw(name: String, value: Any?) { map[name] = value }
     override fun toString(): String {
         val sb = StringBuilder("{")
@@ -287,7 +291,7 @@ class JSONParser(private val s: String) {
 '''
 
 # --------------------------------------------------------------------------- #
-# Harness — reproduces TextEntryRow's submit gate for every input and routes
+# Harness â€” reproduces TextEntryRow's submit gate for every input and routes
 # onSend through the REAL RemoteViewModel (RemoteIntent.TypeText) wired to a
 # recording transport. Emits "label|<frame|<<NONE>>>" lines (base64 in the
 # label is avoided; the Python side keys by the plain text).
@@ -345,7 +349,7 @@ fun main() {
 
     submit("hello", "hello")
     submit("Game of Thrones", "Game of Thrones")
-    submit("cafe", "café")
+    submit("cafe", "cafÃ©")
     submit("blank", "   ")
 
     println("TOTAL|${transport.sent.size}")
@@ -422,13 +426,13 @@ def _parse_lines(stdout):
 
 
 # --------------------------------------------------------------------------- #
-# Behavioural fixture — compile real sources + harness, run once.
+# Behavioural fixture â€” compile real sources + harness, run once.
 # --------------------------------------------------------------------------- #
 @pytest.fixture(scope="module")
 def out(tmp_path_factory):
     tc = _toolchain()
     if tc["missing"]:
-        pytest.skip("toolchain/jars indisponíveis: " + ", ".join(tc["missing"]))
+        pytest.skip("toolchain/jars indisponÃ­veis: " + ", ".join(tc["missing"]))
     for s in REAL_SOURCES:
         if not s.is_file():
             pytest.fail(f"fonte ausente: {s}")
@@ -464,7 +468,7 @@ def out(tmp_path_factory):
     ]
     cr = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
     assert cr.returncode == 0, (
-        "compilação do harness de entrada de texto falhou:\n" + (cr.stdout or "") + (cr.stderr or "")
+        "compilaÃ§Ã£o do harness de entrada de texto falhou:\n" + (cr.stdout or "") + (cr.stderr or "")
     )
 
     run_cp = os.pathsep.join(str(p) for p in [out_dir, *link_libs])
@@ -473,21 +477,21 @@ def out(tmp_path_factory):
         capture_output=True, text=True, timeout=120,
     )
     assert run.returncode == 0, (
-        "execução do harness falhou:\n" + (run.stdout or "") + (run.stderr or "")
+        "execuÃ§Ã£o do harness falhou:\n" + (run.stdout or "") + (run.stderr or "")
     )
     return _parse_lines(run.stdout)
 
 
 # --------------------------------------------------------------------------- #
-# Acceptance (behavioural) — typing + send => sendText with the string, and the
+# Acceptance (behavioural) â€” typing + send => sendText with the string, and the
 # serialized message carries the text Base64-encoded (protocol test).
 # --------------------------------------------------------------------------- #
 @pytest.mark.parametrize("text", TEXT_INPUTS)
 def test_typing_and_send_emits_send_input_string_with_base64(out, text):
-    label = "cafe" if text == "café" else text
+    label = "cafe" if text == "cafÃ©" else text
     frame = out.get(label)
-    assert frame is not None, f"harness não emitiu a entrada {text!r}: {out!r}"
-    assert frame not in ("<<NONE>>",), f"texto {text!r} não produziu frame (foi ignorado?)"
+    assert frame is not None, f"harness nÃ£o emitiu a entrada {text!r}: {out!r}"
+    assert frame not in ("<<NONE>>",), f"texto {text!r} nÃ£o produziu frame (foi ignorado?)"
     # The exact wire frame: ms.remote.control / SendInputString com o texto em
     # Base64 (b64 calculado independentemente em Python).
     assert frame == _text_frame(text), (
@@ -498,34 +502,34 @@ def test_typing_and_send_emits_send_input_string_with_base64(out, text):
 @pytest.mark.parametrize("text", TEXT_INPUTS)
 def test_serialized_message_contains_text_base64(out, text):
     # Foco do "teste de protocolo": o Cmd carrega exatamente o Base64 do texto.
-    label = "cafe" if text == "café" else text
+    label = "cafe" if text == "cafÃ©" else text
     frame = out.get(label, "")
     assert f'"Cmd":"{_b64(text)}"' in frame, (
-        f"o Base64 de {text!r} ({_b64(text)!r}) não aparece no frame: {frame!r}"
+        f"o Base64 de {text!r} ({_b64(text)!r}) nÃ£o aparece no frame: {frame!r}"
     )
     assert '"DataOfCmd":"base64"' in frame
     assert '"TypeOfRemote":"SendInputString"' in frame
 
 
 def test_each_send_forwards_exactly_one_frame(out):
-    # 3 entradas válidas enviadas (a entrada em branco não conta).
+    # 3 entradas vÃ¡lidas enviadas (a entrada em branco nÃ£o conta).
     assert out.get("TOTAL") == str(len(TEXT_INPUTS)), (
         f"total de frames inesperado: {out.get('TOTAL')!r}"
     )
 
 
 def test_blank_input_is_ignored(out):
-    # O gate isNotBlank() da tela: entrada só de espaços não envia nada.
+    # O gate isNotBlank() da tela: entrada sÃ³ de espaÃ§os nÃ£o envia nada.
     assert out.get("blank") == "<<NONE>>", (
-        f"entrada em branco não deveria enviar frame: {out.get('blank')!r}"
+        f"entrada em branco nÃ£o deveria enviar frame: {out.get('blank')!r}"
     )
 
 
 def test_multiword_search_text_roundtrips(out):
-    # Campo de busca: frase com espaços preserva o texto completo no Base64.
+    # Campo de busca: frase com espaÃ§os preserva o texto completo no Base64.
     frame = out.get("Game of Thrones", "")
     assert frame == _text_frame("Game of Thrones"), (
-        f"texto com espaços não preservado: {frame!r}"
+        f"texto com espaÃ§os nÃ£o preservado: {frame!r}"
     )
     # Sanidade: o Base64 decodifica de volta ao texto original.
     decoded = base64.b64decode(_b64("Game of Thrones")).decode("utf-8")
@@ -533,7 +537,7 @@ def test_multiword_search_text_roundtrips(out):
 
 
 # --------------------------------------------------------------------------- #
-# Structural — the Compose screen wiring (always run, no toolchain required).
+# Structural â€” the Compose screen wiring (always run, no toolchain required).
 # --------------------------------------------------------------------------- #
 def test_screen_present():
     assert SCREEN_KT.is_file(), f"RemoteScreen ausente: {SCREEN_KT}"
@@ -544,7 +548,7 @@ def test_screen_renders_text_entry_with_input_and_send():
     assert "TextEntryRow" in text, "a tela deve renderizar o TextEntryRow"
     assert "OutlinedTextField" in text, "deve haver um campo de texto"
     assert "TEXT_INPUT" in text and "TEXT_SEND" in text, (
-        "campo e botão de envio devem expor testTags estáveis"
+        "campo e botÃ£o de envio devem expor testTags estÃ¡veis"
     )
 
 

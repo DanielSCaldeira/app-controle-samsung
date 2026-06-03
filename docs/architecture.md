@@ -194,6 +194,11 @@ mudança no formato quebra os testes de contrato de propósito e exige um novo a
   frame WebSocket se o REST falhar:
   `launchApp` → `POST /api/v2/applications/{appId}`; `sendText` →
   `POST /api/v2/remoteControl/imeInput/{base64}?token={token}` (best-effort).
+- **Descoberta de apps em runtime (ADR-0011).** Como os appIds variam por modelo, ao
+  abrir o socket `RemoteSession` envia `ed.installedApp.get` e expõe a lista
+  (`installedApps: StateFlow<List<InstalledApp>>`). A UI resolve os Favoritos pelo id
+  real e lista todos os apps da TV ("Todos os apps da TV"). Parse em
+  `TizenProtocol.parseInstalledApps`.
 - `parseEvent`/`parseToken` extraem `event` e `data.token` da resposta da TV
   (retornam `null` para token ausente/nulo/vazio ou JSON inválido).
 - As chaves do JSON são emitidas em ordem de inserção determinística para manter a

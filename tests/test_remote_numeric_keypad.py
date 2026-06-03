@@ -1,21 +1,21 @@
-"""Tests for task f7ed960d — Teclado numérico.
+﻿"""Tests for task f7ed960d â€” Teclado numÃ©rico.
 
-Painel numérico (``KEY_0``..``KEY_9``) adicionado à tela de controle para troca
-direta de canais — ligado ao ``RemoteViewModel``.
+Painel numÃ©rico (``KEY_0``..``KEY_9``) adicionado Ã  tela de controle para troca
+direta de canais â€” ligado ao ``RemoteViewModel``.
 
 Acceptance criteria verificado aqui:
-  **Teste de UI: tocar cada dígito envia o ``KEY_<n>`` correspondente via
+  **Teste de UI: tocar cada dÃ­gito envia o ``KEY_<n>`` correspondente via
   ViewModel fake.**
 
-Como o runtime Compose não roda na JVM desktop, provamos *comportamentalmente* o
-elo crítico exigido pelo aceite (seguindo a convenção do repositório —
+Como o runtime Compose nÃ£o roda na JVM desktop, provamos *comportamentalmente* o
+elo crÃ­tico exigido pelo aceite (seguindo a convenÃ§Ã£o do repositÃ³rio â€”
 ``test_remote_media_controls.py`` / ``test_remote_volume_channel.py``): para CADA
-um dos 10 dígitos (0..9), a tela resolve a tecla no ``RemoteKeyCatalog`` (pelo
-mesmo código ``KEY_<n>`` que ``NumericKeys[n]`` usa) e, roteada pelo
+um dos 10 dÃ­gitos (0..9), a tela resolve a tecla no ``RemoteKeyCatalog`` (pelo
+mesmo cÃ³digo ``KEY_<n>`` que ``NumericKeys[n]`` usa) e, roteada pelo
 ``RemoteViewModel`` REAL ligado a um ``CommandTransport`` *fake* (gravador),
-produz exatamente o frame ``SendRemoteKey`` com o ``DataOfCmd`` daquele dígito —
-e os 10 frames são distintos (nenhum dígito fixado na tecla de outro). O
-comportamento "toque → intent" sobre o runtime Compose é coberto pelo teste de
+produz exatamente o frame ``SendRemoteKey`` com o ``DataOfCmd`` daquele dÃ­gito â€”
+e os 10 frames sÃ£o distintos (nenhum dÃ­gito fixado na tecla de outro). O
+comportamento "toque â†’ intent" sobre o runtime Compose Ã© coberto pelo teste de
 UI instrumentado real (ver ``test_compose_ui_test_covers_digits``).
 
 Strategy
@@ -24,12 +24,12 @@ Compilamos os fontes Kotlin reais (``RemoteKeyCatalog`` + ``RemoteViewModel`` +
 ``CommandRepository`` + ``RemoteSession`` + modelos + ``TizenProtocol``) contra
 *shims* puros de ``javax.inject``, ``org.json``, ``androidx.lifecycle`` e
 ``dagger.hilt`` (mais ``kotlinx-coroutines`` + ``okhttp``/``okio`` reais para
-construir a sessão). O harness percorre os 10 dígitos exatamente como a tela faz
-(``NumericKeys[n] = key("KEY_$n")``), resolve cada tecla no catálogo e a roteia
+construir a sessÃ£o). O harness percorre os 10 dÃ­gitos exatamente como a tela faz
+(``NumericKeys[n] = key("KEY_$n")``), resolve cada tecla no catÃ¡logo e a roteia
 pelo ViewModel real ligado a um transporte fake que grava os frames.
 
-Se o toolchain Kotlin/JDK ou os jars não forem localizados nos caches do Gradle,
-os testes comportamentais dão ``skip``; as asserções estruturais sempre rodam.
+Se o toolchain Kotlin/JDK ou os jars nÃ£o forem localizados nos caches do Gradle,
+os testes comportamentais dÃ£o ``skip``; as asserÃ§Ãµes estruturais sempre rodam.
 """
 
 import os
@@ -94,7 +94,7 @@ def _key_frame(code: str) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# Shims — pure annotations, org.json, and the Android/Hilt symbols the
+# Shims â€” pure annotations, org.json, and the Android/Hilt symbols the
 # ViewModel links against. (Shared, verbatim, with test_remote_media_controls.py
 # so the real ViewModel/repository/session link without an Android runtime.)
 # --------------------------------------------------------------------------- #
@@ -154,6 +154,8 @@ internal fun writeValue(sb: StringBuilder, value: Any?) {
 class JSONArray {
     val items = ArrayList<Any?>()
     fun put(value: Any?): JSONArray { items.add(value); return this }
+    fun length(): Int = items.size
+    fun optJSONObject(index: Int): JSONObject? = items.getOrNull(index) as? JSONObject
     override fun toString(): String {
         val sb = StringBuilder("[")
         for ((i, v) in items.withIndex()) { if (i > 0) sb.append(','); writeValue(sb, v) }
@@ -182,6 +184,8 @@ class JSONObject {
         return v.toString()
     }
     fun optJSONObject(name: String): JSONObject? = map[name] as? JSONObject
+    fun optJSONArray(name: String): JSONArray? = map[name] as? JSONArray
+    fun optInt(name: String, fallback: Int = 0): Int = (map[name] as? Int) ?: fallback
     internal fun putRaw(name: String, value: Any?) { map[name] = value }
     override fun toString(): String {
         val sb = StringBuilder("{")
@@ -277,7 +281,7 @@ class JSONParser(private val s: String) {
 '''
 
 # --------------------------------------------------------------------------- #
-# Harness — reproduces what the numeric keypad does for every digit: resolve the
+# Harness â€” reproduces what the numeric keypad does for every digit: resolve the
 # RemoteKey from RemoteKeyCatalog (by the same KEY_<n> code the screen's
 # NumericKeys uses) and route RemoteIntent.PressKey(key) through the REAL
 # RemoteViewModel, ligado a um transporte fake gravador. Emits "code|frame".
@@ -404,13 +408,13 @@ def _parse_lines(stdout):
 
 
 # --------------------------------------------------------------------------- #
-# Behavioural fixture — compile real sources + harness, run once.
+# Behavioural fixture â€” compile real sources + harness, run once.
 # --------------------------------------------------------------------------- #
 @pytest.fixture(scope="module")
 def out(tmp_path_factory):
     tc = _toolchain()
     if tc["missing"]:
-        pytest.skip("toolchain/jars indisponíveis: " + ", ".join(tc["missing"]))
+        pytest.skip("toolchain/jars indisponÃ­veis: " + ", ".join(tc["missing"]))
     for s in REAL_SOURCES:
         if not s.is_file():
             pytest.fail(f"fonte ausente: {s}")
@@ -446,7 +450,7 @@ def out(tmp_path_factory):
     ]
     cr = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
     assert cr.returncode == 0, (
-        "compilação do harness do teclado numérico falhou:\n" + (cr.stdout or "") + (cr.stderr or "")
+        "compilaÃ§Ã£o do harness do teclado numÃ©rico falhou:\n" + (cr.stdout or "") + (cr.stderr or "")
     )
 
     run_cp = os.pathsep.join(str(p) for p in [out_dir, *link_libs])
@@ -455,32 +459,32 @@ def out(tmp_path_factory):
         capture_output=True, text=True, timeout=120,
     )
     assert run.returncode == 0, (
-        "execução do harness falhou:\n" + (run.stdout or "") + (run.stderr or "")
+        "execuÃ§Ã£o do harness falhou:\n" + (run.stdout or "") + (run.stderr or "")
     )
     return _parse_lines(run.stdout)
 
 
 # --------------------------------------------------------------------------- #
-# Acceptance (behavioural) — tapping each digit sends KEY_<n> (with fake).
+# Acceptance (behavioural) â€” tapping each digit sends KEY_<n> (with fake).
 # --------------------------------------------------------------------------- #
 @pytest.mark.parametrize("digit", DIGITS)
 def test_each_digit_sends_its_key(out, digit):
     code = _code(digit)
     # The catalog lookup the screen performs must resolve (not <<MISSING>>)...
     frame = out.get(code)
-    assert frame is not None, f"harness não emitiu o dígito {digit} ({code}): {out!r}"
+    assert frame is not None, f"harness nÃ£o emitiu o dÃ­gito {digit} ({code}): {out!r}"
     assert frame != "<<MISSING>>", f"tecla {code} ausente no RemoteKeyCatalog"
     # ...and tapping it emits exactly the SendRemoteKey frame for KEY_<n>.
     assert frame == _key_frame(code), (
-        f"tocar o dígito {digit} não enviou o KEY_<n> correto: {frame!r}"
+        f"tocar o dÃ­gito {digit} nÃ£o enviou o KEY_<n> correto: {frame!r}"
     )
 
 
 def test_all_ten_digits_emit_distinct_frames(out):
     frames = [out.get(_code(d)) for d in DIGITS]
-    assert all(f and f != "<<MISSING>>" for f in frames), f"dígito faltando: {frames!r}"
-    # No digit is hard-coded to another's key — 10 digits, 10 distinct frames.
-    assert len(set(frames)) == len(DIGITS), f"frames duplicados entre dígitos: {frames!r}"
+    assert all(f and f != "<<MISSING>>" for f in frames), f"dÃ­gito faltando: {frames!r}"
+    # No digit is hard-coded to another's key â€” 10 digits, 10 distinct frames.
+    assert len(set(frames)) == len(DIGITS), f"frames duplicados entre dÃ­gitos: {frames!r}"
 
 
 def test_each_digit_press_forwards_exactly_one_frame(out):
@@ -491,7 +495,7 @@ def test_each_digit_press_forwards_exactly_one_frame(out):
 
 
 # --------------------------------------------------------------------------- #
-# Structural — the Compose screen wiring (always run, no toolchain required).
+# Structural â€” the Compose screen wiring (always run, no toolchain required).
 # --------------------------------------------------------------------------- #
 def test_screen_present():
     assert SCREEN_KT.is_file(), f"RemoteScreen ausente: {SCREEN_KT}"
@@ -500,8 +504,8 @@ def test_screen_present():
 def test_screen_defines_test_tag_for_every_digit():
     text = _read(SCREEN_KT)
     # The screen exposes a stable testTag per digit (RemoteTestTags.digit(n)).
-    assert "fun digit(" in text, "RemoteTestTags deve expor um testTag por dígito (digit(n))"
-    assert "testTag" in text, "os dígitos devem expor testTags estáveis"
+    assert "fun digit(" in text, "RemoteTestTags deve expor um testTag por dÃ­gito (digit(n))"
+    assert "testTag" in text, "os dÃ­gitos devem expor testTags estÃ¡veis"
     assert "RemoteTestTags.digit(" in text, "cada DigitButton deve usar RemoteTestTags.digit(n)"
 
 
@@ -511,32 +515,32 @@ def test_screen_resolves_digit_keys_from_catalog():
     text = _read(SCREEN_KT)
     assert "RemoteKeyCatalog" in text, "a tela deve resolver teclas via RemoteKeyCatalog"
     assert "NumericKeys" in text, "a tela deve construir a lista NumericKeys (KEY_0..KEY_9)"
-    assert 'key("KEY_$' in text, "NumericKeys deve resolver KEY_<n> dinamicamente do catálogo"
+    assert 'key("KEY_$' in text, "NumericKeys deve resolver KEY_<n> dinamicamente do catÃ¡logo"
 
 
 def test_screen_emits_press_key_intents_for_digits():
     text = _read(SCREEN_KT)
-    assert "RemoteIntent.PressKey" in text, "cada dígito deve emitir RemoteIntent.PressKey"
+    assert "RemoteIntent.PressKey" in text, "cada dÃ­gito deve emitir RemoteIntent.PressKey"
     assert "NumericKeypad" in text, "a tela deve renderizar o NumericKeypad"
 
 
 def test_catalog_contains_every_digit_key():
     text = _read(REMOTE_KEY_CATALOG_KT)
     for digit in DIGITS:
-        assert f'"{_code(digit)}"' in text, f"catálogo não define a tecla {_code(digit)}"
+        assert f'"{_code(digit)}"' in text, f"catÃ¡logo nÃ£o define a tecla {_code(digit)}"
 
 
 # --------------------------------------------------------------------------- #
-# Criterion (UI) — the instrumented Compose UI test artifact covers the keypad.
+# Criterion (UI) â€” the instrumented Compose UI test artifact covers the keypad.
 # --------------------------------------------------------------------------- #
 def test_compose_ui_test_covers_digits():
     assert UI_TEST_KT.is_file(), f"teste de UI Compose ausente: {UI_TEST_KT}"
     text = _read(UI_TEST_KT)
     assert "createComposeRule" in text, "teste de UI deve usar createComposeRule"
     assert "setContent" in text and "RemoteScreen(" in text, "teste deve renderizar RemoteScreen"
-    assert "performClick" in text, "teste deve tocar nos dígitos"
+    assert "performClick" in text, "teste deve tocar nos dÃ­gitos"
     assert "RemoteIntent.PressKey" in text, "teste deve verificar o intent disparado (com fake)"
     # Every digit's tag must be exercised by the UI test (RemoteTestTags.digit(n)).
     assert "RemoteTestTags.digit(" in text, (
-        "teste de UI deve tocar cada dígito via RemoteTestTags.digit(n)"
+        "teste de UI deve tocar cada dÃ­gito via RemoteTestTags.digit(n)"
     )

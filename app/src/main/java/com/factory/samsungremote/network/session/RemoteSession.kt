@@ -3,6 +3,7 @@ package com.factory.samsungremote.network.session
 import com.factory.samsungremote.data.registry.RemoteKey
 import com.factory.samsungremote.network.discovery.DiscoveredTv
 import com.factory.samsungremote.network.protocol.TizenCommand
+import com.factory.samsungremote.network.protocol.InstalledApp
 import com.factory.samsungremote.network.protocol.TizenEvent
 import com.factory.samsungremote.network.protocol.TizenProtocol
 import kotlinx.coroutines.CoroutineScope
@@ -104,6 +105,18 @@ class RemoteSession @Inject constructor(
     /** Stream of protocol events received from the TV over the open socket. */
     val events: SharedFlow<TizenEvent> = _events.asSharedFlow()
 
+    private val _installedApps = MutableStateFlow<List<InstalledApp>>(emptyList())
+
+    /**
+     * Apps installed on the currently connected TV, discovered at runtime via
+     * `ed.installedApp.get` (ADR-0010). Empty until the reply arrives (or when no
+     * TV is connected); refreshed on each connection so the list always reflects
+     * the TV in front of the user — the app ids are the TV's own, so they are
+     * always correct for that model. The UI uses these to resolve the curated
+     * shortcuts' real ids and to offer the full app list.
+     */
+    val installedApps: StateFlow<List<InstalledApp>> = _installedApps.asStateFlow()
+
     /** Serializes [connect]/[disconnect] so only one connection loop runs. */
     private val controlMutex = Mutex()
 
@@ -137,6 +150,8 @@ class RemoteSession @Inject constructor(
         val target = Target(host = tv.ipAddress, token = token)
         connectedHost = target.host
         connectedToken = target.token
+        // Drop the previous TV's app list; the new one is requested on open.
+        _installedApps.value = emptyList()
         scope.launch {
             controlMutex.withLock {
                 connectionJob?.cancelAndJoin()
@@ -323,10 +338,16 @@ class RemoteSession @Inject constructor(
                     Signal.Open -> {
                         connected = true
                         _state.value = ConnectionState.Connected
+                        // Discover this TV's apps so the UI can use real ids.
+                        webSocket.send(TizenProtocol.requestInstalledApps())
                     }
 
-                    is Signal.Text ->
+                    is Signal.Text -> {
                         TizenProtocol.parseEvent(signal.text)?.let(_events::tryEmit)
+                        TizenProtocol.parseInstalledApps(signal.text)?.let {
+                            _installedApps.value = it
+                        }
+                    }
 
                     is Signal.Closing ->
                         webSocket.close(NORMAL_CLOSURE, null)

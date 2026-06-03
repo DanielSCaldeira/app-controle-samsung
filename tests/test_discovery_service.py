@@ -1,8 +1,8 @@
-"""Tests for task 1f5263f1 — DiscoveryService via SSDP/mDNS.
+﻿"""Tests for task 1f5263f1 â€” DiscoveryService via SSDP/mDNS.
 
 Acceptance criteria verified here (behaviourally):
   1. A fake HTTP server's ``GET /api/v2/`` Samsung response is parsed into a TV
-     model (id, name/model, IP) by the real ``SamsungDeviceInfoParser`` — and a
+     model (id, name/model, IP) by the real ``SamsungDeviceInfoParser`` â€” and a
      non-Samsung / invalid response is rejected.
   2. End-to-end discovery over a **fake UDP (SSDP) server + fake HTTP server**:
      the real ``SsdpCandidateSource`` -> ``RestTvCandidateValidator`` (OkHttp) ->
@@ -30,7 +30,7 @@ For criterion 2 the test stands up two real fake servers on loopback:
 ``SsdpCandidateSource`` is pointed at the UDP server (its multicast group/port
 are constructor params), so the genuine SSDP send/receive/parse path runs, then
 the genuine OkHttp validator fetches and parses the HTTP body, then the genuine
-``DiscoveryService`` emits the de-duplicated TV — all measured for the ``< 5 s``
+``DiscoveryService`` emits the de-duplicated TV â€” all measured for the ``< 5 s``
 budget.
 
 If no Kotlin toolchain / required jars can be located in the Gradle caches (or no
@@ -68,7 +68,7 @@ GRADLE_CACHES = Path.home() / ".gradle" / "caches"
 
 
 # --------------------------------------------------------------------------- #
-# Embedded org.json shim (insertion-ordered, JSON-null sentinel) — identical
+# Embedded org.json shim (insertion-ordered, JSON-null sentinel) â€” identical
 # semantics to Android's org.json for the operations the parser uses.
 # --------------------------------------------------------------------------- #
 ORG_JSON_SHIM = r'''package org.json
@@ -80,6 +80,8 @@ object NULL { override fun toString(): String = "null" }
 class JSONArray {
     val items = ArrayList<Any?>()
     fun put(value: Any?): JSONArray { items.add(value); return this }
+    fun length(): Int = items.size
+    fun optJSONObject(index: Int): JSONObject? = items.getOrNull(index) as? JSONObject
 }
 
 class JSONObject {
@@ -103,6 +105,8 @@ class JSONObject {
         return v.toString()
     }
     fun optJSONObject(name: String): JSONObject? = map[name] as? JSONObject
+    fun optJSONArray(name: String): JSONArray? = map[name] as? JSONArray
+    fun optInt(name: String, fallback: Int = 0): Int = (map[name] as? Int) ?: fallback
     internal fun putRaw(name: String, value: Any?) { map[name] = value }
 }
 
@@ -189,7 +193,7 @@ class JSONParser(private val s: String) {
 '''
 
 # --------------------------------------------------------------------------- #
-# Harness 1 — pure parser (no network, no coroutines)
+# Harness 1 â€” pure parser (no network, no coroutines)
 # --------------------------------------------------------------------------- #
 PARSER_HARNESS_KT = r'''import com.factory.samsungremote.network.discovery.SamsungDeviceInfoParser
 import com.factory.samsungremote.network.discovery.DiscoveredTv
@@ -220,7 +224,7 @@ fun main() {
 '''
 
 # --------------------------------------------------------------------------- #
-# Harness 2 — full pipeline (real SSDP source + OkHttp validator + service)
+# Harness 2 â€” full pipeline (real SSDP source + OkHttp validator + service)
 #   args[0] = HTTP port, args[1] = UDP (fake SSDP) port
 # --------------------------------------------------------------------------- #
 E2E_HARNESS_KT = r'''import com.factory.samsungremote.network.discovery.DiscoveredTv
@@ -389,7 +393,7 @@ def _compile(tmp_path, sources, extra_libs, label):
     ]
     cr = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
     assert cr.returncode == 0, (
-        f"compilação de discovery ({label}) falhou:\n" + (cr.stdout or "") + (cr.stderr or "")
+        f"compilaÃ§Ã£o de discovery ({label}) falhou:\n" + (cr.stdout or "") + (cr.stderr or "")
     )
     run_cp = [out, tc["stdlib"]] + [p for p in extra_libs if p]
     return out, run_cp, tc
@@ -417,7 +421,7 @@ def _parse_kv_lines(stdout):
 
 
 # --------------------------------------------------------------------------- #
-# Criterion 1 — parser turns a Samsung /api/v2/ response into a TV model
+# Criterion 1 â€” parser turns a Samsung /api/v2/ response into a TV model
 # --------------------------------------------------------------------------- #
 @pytest.fixture(scope="module")
 def parser_out(tmp_path_factory):
@@ -438,13 +442,13 @@ def parser_out(tmp_path_factory):
         str(DISCOVERED_TV_KT), str(PARSER_KT), str(harness),
     ]
     cr = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
-    assert cr.returncode == 0, "compilação do parser harness falhou:\n" + (cr.stdout or "") + (cr.stderr or "")
+    assert cr.returncode == 0, "compilaÃ§Ã£o do parser harness falhou:\n" + (cr.stdout or "") + (cr.stderr or "")
 
     run = subprocess.run(
         [tc["java"], "-cp", os.pathsep.join(str(p) for p in run_cp), "ParserHarnessKt"],
         capture_output=True, text=True, timeout=120,
     )
-    assert run.returncode == 0, "execução do parser harness falhou:\n" + (run.stdout or "") + (run.stderr or "")
+    assert run.returncode == 0, "execuÃ§Ã£o do parser harness falhou:\n" + (run.stdout or "") + (run.stderr or "")
     return _parse_kv_lines(run.stdout)
 
 
@@ -562,7 +566,7 @@ class _FakeServers:
 
 
 # --------------------------------------------------------------------------- #
-# Criterion 2 — full pipeline finds the TV via fake SSDP+HTTP in < 5 s
+# Criterion 2 â€” full pipeline finds the TV via fake SSDP+HTTP in < 5 s
 # --------------------------------------------------------------------------- #
 @pytest.fixture(scope="module")
 def e2e_out(tmp_path_factory):
@@ -601,7 +605,7 @@ def e2e_out(tmp_path_factory):
     ]
     cr = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
     assert cr.returncode == 0, (
-        "compilação do pipeline de discovery falhou:\n" + (cr.stdout or "") + (cr.stderr or "")
+        "compilaÃ§Ã£o do pipeline de discovery falhou:\n" + (cr.stdout or "") + (cr.stderr or "")
     )
 
     servers = _FakeServers()
@@ -616,13 +620,13 @@ def e2e_out(tmp_path_factory):
     finally:
         servers.stop()
     assert run.returncode == 0, (
-        "execução do pipeline de discovery falhou:\n" + (run.stdout or "") + (run.stderr or "")
+        "execuÃ§Ã£o do pipeline de discovery falhou:\n" + (run.stdout or "") + (run.stderr or "")
     )
     return _parse_kv_lines(run.stdout)
 
 
 def test_discovery_emits_samsung_tv_from_fake_ssdp_and_http(e2e_out):
-    assert e2e_out.get("e2e_status") == "ok", f"discovery não emitiu TV: {e2e_out!r}"
+    assert e2e_out.get("e2e_status") == "ok", f"discovery nÃ£o emitiu TV: {e2e_out!r}"
     assert e2e_out.get("e2e_id") == "uuid:e2e-777"
     assert e2e_out.get("e2e_name") == "[TV] Office"
     assert e2e_out.get("e2e_ip") == "127.0.0.1"
@@ -632,7 +636,7 @@ def test_discovery_emits_samsung_tv_from_fake_ssdp_and_http(e2e_out):
 def test_discovery_happy_path_under_5s(e2e_out):
     assert e2e_out.get("e2e_status") == "ok"
     elapsed = int(e2e_out["e2e_elapsed_ms"])
-    assert elapsed < 5000, f"descoberta demorou {elapsed} ms (orçamento < 5000 ms)"
+    assert elapsed < 5000, f"descoberta demorou {elapsed} ms (orÃ§amento < 5000 ms)"
 
 
 # --------------------------------------------------------------------------- #

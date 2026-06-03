@@ -1,40 +1,40 @@
-"""Tests for task ab1888ac — Wake-on-LAN (ligar TV desligada).
+﻿"""Tests for task ab1888ac â€” Wake-on-LAN (ligar TV desligada).
 
-Uma TV totalmente desligada não responde no socket de controle. Quando o
-usuário aperta POWER e a sessão está offline, o app deve cair para um envio de
+Uma TV totalmente desligada nÃ£o responde no socket de controle. Quando o
+usuÃ¡rio aperta POWER e a sessÃ£o estÃ¡ offline, o app deve cair para um envio de
 **magic packet** Wake-on-LAN, em broadcast UDP, usando o ``macAddress``
 persistido (capturado em ``connect``).
 
 Acceptance criteria verificado aqui (comportamentalmente):
-  1. **Teste unitário valida o formato do magic packet (6x 0xFF + 16x MAC).**
-  2. **O botão POWER tenta WoL quando a sessão está offline.**
+  1. **Teste unitÃ¡rio valida o formato do magic packet (6x 0xFF + 16x MAC).**
+  2. **O botÃ£o POWER tenta WoL quando a sessÃ£o estÃ¡ offline.**
 
-Estratégia (segue a convenção do repositório — ver ``test_remote_text_input.py``
+EstratÃ©gia (segue a convenÃ§Ã£o do repositÃ³rio â€” ver ``test_remote_text_input.py``
 / ``test_remote_viewmodel.py``): compilamos e EXECUTAMOS os fontes Kotlin REAIS
 (``WakeOnLan`` + ``RemoteViewModel`` + ``CommandRepository`` + ``RemoteSession``
 + modelos + ``TizenProtocol``) contra *shims* puros de ``javax.inject``,
-``org.json``, ``androidx.lifecycle`` (incluindo a propriedade de extensão
-``viewModelScope``, agora usada pelo ViewModel) e ``dagger.hilt`` — mais
+``org.json``, ``androidx.lifecycle`` (incluindo a propriedade de extensÃ£o
+``viewModelScope``, agora usada pelo ViewModel) e ``dagger.hilt`` â€” mais
 ``kotlinx-coroutines`` + ``okhttp``/``okio`` reais.
 
-Para o critério (1) chamamos a função pura ``WakeOnLan.buildMagicPacket`` (sem
+Para o critÃ©rio (1) chamamos a funÃ§Ã£o pura ``WakeOnLan.buildMagicPacket`` (sem
 I/O) e imprimimos os 102 bytes em hex; o Python verifica, de forma independente,
-o layout exigido (6 bytes 0xFF + 6-byte MAC × 16) e que MACs inválidos são
+o layout exigido (6 bytes 0xFF + 6-byte MAC Ã— 16) e que MACs invÃ¡lidos sÃ£o
 rejeitados.
 
-Para o critério (2), como WoL é um efeito de rede "fire-and-forget" (UDP
+Para o critÃ©rio (2), como WoL Ã© um efeito de rede "fire-and-forget" (UDP
 broadcast para ``255.255.255.255:9``) disparado pelo ``RemoteViewModel`` REAL,
 abrimos um socket UDP local em ``0.0.0.0:9`` e provamos o comportamento pelo
-*pacote observado na rede* — exatamente como os outros testes provam o frame
+*pacote observado na rede* â€” exatamente como os outros testes provam o frame
 serializado. O harness aciona ``onIntent(PressKey(POWER))`` com um transporte
 *fake* OFFLINE (``sendKey`` -> ``false``) e confirma que o magic packet do MAC
-persistido chega ao receptor. Os contracasos (POWER online, tecla NÃO-power
-offline, e POWER offline sem MAC) NÃO devem produzir pacote algum.
+persistido chega ao receptor. Os contracasos (POWER online, tecla NÃƒO-power
+offline, e POWER offline sem MAC) NÃƒO devem produzir pacote algum.
 
-Se o ambiente não entregar o broadcast limitado em loopback (alguns CIs sem
-rede), o bloco comportamental de rede dá ``skip``; as asserções de formato
-(puras) e as estruturais sempre rodam. Se o toolchain Kotlin/JDK ou os jars não
-forem localizados, os testes que compilam dão ``skip``.
+Se o ambiente nÃ£o entregar o broadcast limitado em loopback (alguns CIs sem
+rede), o bloco comportamental de rede dÃ¡ ``skip``; as asserÃ§Ãµes de formato
+(puras) e as estruturais sempre rodam. Se o toolchain Kotlin/JDK ou os jars nÃ£o
+forem localizados, os testes que compilam dÃ£o ``skip``.
 """
 
 import os
@@ -87,7 +87,7 @@ def _expected_magic_packet_hex(mac_hex: str) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# Shims — pure annotations, org.json, and the Android/Hilt symbols the
+# Shims â€” pure annotations, org.json, and the Android/Hilt symbols the
 # ViewModel/Session link against. Mirrors test_remote_text_input.py, EXTENDED so
 # androidx.lifecycle also provides the `viewModelScope` extension property now
 # used by RemoteViewModel (backed by a real IO-dispatched scope so the
@@ -111,7 +111,7 @@ abstract class ViewModel {
 }
 
 // Real androidx provides this as an extension property; a shared IO-backed scope
-// is enough for the harness — the launched WoL send runs on a real thread so the
+// is enough for the harness â€” the launched WoL send runs on a real thread so the
 // receiver observes the broadcast.
 private val sharedViewModelScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 val ViewModel.viewModelScope: CoroutineScope get() = sharedViewModelScope
@@ -159,6 +159,8 @@ internal fun writeValue(sb: StringBuilder, value: Any?) {
 class JSONArray {
     val items = ArrayList<Any?>()
     fun put(value: Any?): JSONArray { items.add(value); return this }
+    fun length(): Int = items.size
+    fun optJSONObject(index: Int): JSONObject? = items.getOrNull(index) as? JSONObject
     override fun toString(): String {
         val sb = StringBuilder("[")
         for ((i, v) in items.withIndex()) { if (i > 0) sb.append(','); writeValue(sb, v) }
@@ -187,6 +189,8 @@ class JSONObject {
         return v.toString()
     }
     fun optJSONObject(name: String): JSONObject? = map[name] as? JSONObject
+    fun optJSONArray(name: String): JSONArray? = map[name] as? JSONArray
+    fun optInt(name: String, fallback: Int = 0): Int = (map[name] as? Int) ?: fallback
     internal fun putRaw(name: String, value: Any?) { map[name] = value }
     override fun toString(): String {
         val sb = StringBuilder("{")
@@ -282,7 +286,7 @@ class JSONParser(private val s: String) {
 '''
 
 # --------------------------------------------------------------------------- #
-# Harness — exercises the REAL WakeOnLan + RemoteViewModel and emits
+# Harness â€” exercises the REAL WakeOnLan + RemoteViewModel and emits
 # "label|value" lines:
 #   FORMAT|<hex 102 bytes>           buildMagicPacket(TEST_MAC) layout
 #   FORMAT_LEN|<int>                 packet length
@@ -350,7 +354,7 @@ fun newViewModel(connected: Boolean): RemoteViewModel {
 
 /**
  * Connects (storing [mac]), presses [key], and reports the magic packet captured
- * on the local WoL port (or NONE on timeout — i.e. no WoL was attempted).
+ * on the local WoL port (or NONE on timeout â€” i.e. no WoL was attempted).
  */
 fun probe(label: String, connected: Boolean, key: RemoteKey, mac: String?, timeoutMs: Int) {
     val vm = newViewModel(connected)
@@ -378,7 +382,7 @@ fun probe(label: String, connected: Boolean, key: RemoteKey, mac: String?, timeo
 }
 
 fun main() {
-    // ---- (1) Magic packet format — pure, no I/O. ----
+    // ---- (1) Magic packet format â€” pure, no I/O. ----
     val packet = WakeOnLan.buildMagicPacket(MAC)
     println("FORMAT|" + hex(packet, packet.size))
     println("FORMAT_LEN|" + packet.size)
@@ -468,13 +472,13 @@ def _parse_lines(stdout):
 
 
 # --------------------------------------------------------------------------- #
-# Behavioural fixture — compile real sources + harness, run once.
+# Behavioural fixture â€” compile real sources + harness, run once.
 # --------------------------------------------------------------------------- #
 @pytest.fixture(scope="module")
 def out(tmp_path_factory):
     tc = _toolchain()
     if tc["missing"]:
-        pytest.skip("toolchain/jars indisponíveis: " + ", ".join(tc["missing"]))
+        pytest.skip("toolchain/jars indisponÃ­veis: " + ", ".join(tc["missing"]))
     for s in REAL_SOURCES:
         if not s.is_file():
             pytest.fail(f"fonte ausente: {s}")
@@ -510,7 +514,7 @@ def out(tmp_path_factory):
     ]
     cr = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
     assert cr.returncode == 0, (
-        "compilação do harness WoL falhou:\n" + (cr.stdout or "") + (cr.stderr or "")
+        "compilaÃ§Ã£o do harness WoL falhou:\n" + (cr.stdout or "") + (cr.stderr or "")
     )
 
     run_cp = os.pathsep.join(str(p) for p in [out_dir, *link_libs])
@@ -519,21 +523,21 @@ def out(tmp_path_factory):
         capture_output=True, text=True, timeout=120,
     )
     assert run.returncode == 0, (
-        "execução do harness WoL falhou:\n" + (run.stdout or "") + (run.stderr or "")
+        "execuÃ§Ã£o do harness WoL falhou:\n" + (run.stdout or "") + (run.stderr or "")
     )
     return _parse_lines(run.stdout)
 
 
 # --------------------------------------------------------------------------- #
-# Acceptance (1) — magic packet format: 6x 0xFF + 16x MAC (behavioural, pure).
+# Acceptance (1) â€” magic packet format: 6x 0xFF + 16x MAC (behavioural, pure).
 # --------------------------------------------------------------------------- #
 def test_harness_ran(out):
-    assert out.get("DONE") == "1", f"harness não concluiu: {out!r}"
+    assert out.get("DONE") == "1", f"harness nÃ£o concluiu: {out!r}"
 
 
 def test_magic_packet_layout_is_sync_stream_plus_mac_x16(out):
     packet = out.get("FORMAT")
-    assert packet is not None, f"harness não emitiu FORMAT: {out!r}"
+    assert packet is not None, f"harness nÃ£o emitiu FORMAT: {out!r}"
     expected = _expected_magic_packet_hex(TEST_MAC_HEX)
     assert packet == expected, (
         f"layout do magic packet incorreto:\n  obtido:   {packet}\n  esperado: {expected}"
@@ -543,7 +547,7 @@ def test_magic_packet_layout_is_sync_stream_plus_mac_x16(out):
 def test_magic_packet_starts_with_six_ff_bytes(out):
     packet = out.get("FORMAT", "")
     assert packet[:12] == "ff" * 6, (
-        f"o magic packet deve começar com 6 bytes 0xFF: {packet[:12]!r}"
+        f"o magic packet deve comeÃ§ar com 6 bytes 0xFF: {packet[:12]!r}"
     )
 
 
@@ -563,27 +567,27 @@ def test_magic_packet_total_length_is_102_bytes(out):
 
 
 def test_invalid_mac_is_rejected(out):
-    assert out.get("INVALID_MAC") == "THREW", "MAC não-hex deve ser rejeitado"
-    assert out.get("SHORT_MAC") == "THREW", "MAC com nº errado de octetos deve ser rejeitado"
+    assert out.get("INVALID_MAC") == "THREW", "MAC nÃ£o-hex deve ser rejeitado"
+    assert out.get("SHORT_MAC") == "THREW", "MAC com nÂº errado de octetos deve ser rejeitado"
 
 
 # --------------------------------------------------------------------------- #
-# Acceptance (2) — POWER press tries WoL when the session is offline.
+# Acceptance (2) â€” POWER press tries WoL when the session is offline.
 # Network-dependent: skipped only if the environment cannot deliver the local
 # limited broadcast (so the positive case itself never arrives).
 # --------------------------------------------------------------------------- #
 def _require_delivery(out):
     if out.get("WOL_POWER_OFFLINE") == "NONE":
         pytest.skip(
-            "ambiente não entregou o broadcast WoL local (255.255.255.255:9); "
-            "asserções de rede ignoradas"
+            "ambiente nÃ£o entregou o broadcast WoL local (255.255.255.255:9); "
+            "asserÃ§Ãµes de rede ignoradas"
         )
 
 
 def test_power_press_offline_sends_magic_packet(out):
     _require_delivery(out)
     captured = out.get("WOL_POWER_OFFLINE")
-    assert captured is not None, f"harness não emitiu WOL_POWER_OFFLINE: {out!r}"
+    assert captured is not None, f"harness nÃ£o emitiu WOL_POWER_OFFLINE: {out!r}"
     expected = _expected_magic_packet_hex(TEST_MAC_HEX)
     assert captured == expected, (
         "POWER offline deveria transmitir o magic packet do MAC persistido:\n"
@@ -594,7 +598,7 @@ def test_power_press_offline_sends_magic_packet(out):
 def test_power_press_online_does_not_send_wol(out):
     _require_delivery(out)
     assert out.get("WOL_POWER_ONLINE") == "NONE", (
-        "com a sessão ONLINE, POWER não deve disparar WoL: "
+        "com a sessÃ£o ONLINE, POWER nÃ£o deve disparar WoL: "
         f"{out.get('WOL_POWER_ONLINE')!r}"
     )
 
@@ -602,7 +606,7 @@ def test_power_press_online_does_not_send_wol(out):
 def test_non_power_key_offline_does_not_send_wol(out):
     _require_delivery(out)
     assert out.get("WOL_VOLUME_OFFLINE") == "NONE", (
-        "tecla NÃO-power offline não deve disparar WoL: "
+        "tecla NÃƒO-power offline nÃ£o deve disparar WoL: "
         f"{out.get('WOL_VOLUME_OFFLINE')!r}"
     )
 
@@ -616,7 +620,7 @@ def test_power_press_offline_without_known_mac_skips_wol(out):
 
 
 # --------------------------------------------------------------------------- #
-# Structural — wiring guarantees (always run, no toolchain required).
+# Structural â€” wiring guarantees (always run, no toolchain required).
 # --------------------------------------------------------------------------- #
 def test_wake_on_lan_source_present():
     assert WAKE_ON_LAN_KT.is_file(), f"WakeOnLan ausente: {WAKE_ON_LAN_KT}"
@@ -650,7 +654,7 @@ def test_viewmodel_attempts_wol_on_power_when_offline():
         "o ViewModel deve depender do WakeOnLan"
     )
     assert "wakeOnLan.wake(" in text, "o ViewModel deve chamar wakeOnLan.wake(...)"
-    assert "KeyCategory.POWER" in text, "o fallback WoL deve ser restrito à tecla POWER"
+    assert "KeyCategory.POWER" in text, "o fallback WoL deve ser restrito Ã  tecla POWER"
 
 
 def test_viewmodel_stores_mac_address_for_wol():

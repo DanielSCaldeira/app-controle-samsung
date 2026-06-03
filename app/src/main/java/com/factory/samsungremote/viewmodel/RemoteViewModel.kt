@@ -6,6 +6,7 @@ import com.factory.samsungremote.data.registry.KeyCategory
 import com.factory.samsungremote.data.registry.RemoteKey
 import com.factory.samsungremote.data.repository.CommandRepository
 import com.factory.samsungremote.network.discovery.DiscoveredTv
+import com.factory.samsungremote.network.protocol.InstalledApp
 import com.factory.samsungremote.network.session.ConnectionState
 import com.factory.samsungremote.network.session.RemoteSession
 import com.factory.samsungremote.network.wol.WakeOnLan
@@ -91,6 +92,14 @@ class RemoteViewModel @Inject constructor(
      * here without re-collection.
      */
     val connectionState: StateFlow<ConnectionState> = session.state
+
+    /**
+     * Apps installed on the connected TV, discovered at runtime (ADR-0010). The
+     * screen renders these as the full "all apps" list and uses them to resolve
+     * the curated shortcuts' real app ids, so the remote adapts to each TV model
+     * instead of relying on hard-coded ids.
+     */
+    val installedApps: StateFlow<List<InstalledApp>> = session.installedApps
 
     /**
      * Routes a touch-derived [intent] to the matching domain action.

@@ -47,3 +47,23 @@ data class TizenEvent(
     val event: String,
     val token: String? = null,
 )
+
+/**
+ * An application installed on the TV, as reported by the `ed.installedApp.get`
+ * reply. Discovering these at runtime lets the remote adapt to each TV model
+ * instead of hard-coding app ids, which vary by model/region/firmware (ADR-0010).
+ *
+ * @property appId    Tizen application id used to launch the app (the id is the
+ *                    TV's own, so it is always correct for that set).
+ * @property name     Human-readable app name for display.
+ * @property appType  Tizen app type code (`app_type`), when reported; `null`
+ *                    otherwise. (2 is the common value for regular user apps.)
+ * @property iconPath Server-relative icon path reported by the TV, when present;
+ *                    fetchable under `http://<ip>:8001<iconPath>`. `null` if absent.
+ */
+data class InstalledApp(
+    val appId: String,
+    val name: String,
+    val appType: Int? = null,
+    val iconPath: String? = null,
+)

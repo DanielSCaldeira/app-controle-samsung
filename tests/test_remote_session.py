@@ -1,43 +1,43 @@
-"""Tests for task 0d1e3b9a — RemoteSession: WebSocket persistente + reconexão.
+﻿"""Tests for task 0d1e3b9a â€” RemoteSession: WebSocket persistente + reconexÃ£o.
 
 Acceptance criteria verified here (behaviourally):
-  1. **Envio de tecla gera o frame esperado.** Com a sessão conectada (via um
-     ``WebSocket.Factory`` *fake* no espírito do ``MockWebServer``), ``sendKey``
+  1. **Envio de tecla gera o frame esperado.** Com a sessÃ£o conectada (via um
+     ``WebSocket.Factory`` *fake* no espÃ­rito do ``MockWebServer``), ``sendKey``
      escreve no socket exatamente o JSON ``ms.remote.control`` / ``SendRemoteKey``
      que ``TizenProtocol`` produz.
-  2. **Queda de conexão dispara reconexão automática** (estado volta a
+  2. **Queda de conexÃ£o dispara reconexÃ£o automÃ¡tica** (estado volta a
      ``Connected``) em **< 3 s simulados**: usando tempo *virtual*
-     (``TestCoroutineScheduler``) provamos que, após um ``onFailure`` no socket
+     (``TestCoroutineScheduler``) provamos que, apÃ³s um ``onFailure`` no socket
      vivo, o estado passa por ``Reconnecting`` e retorna a ``Connected`` com o
-     backoff inicial (500 ms virtuais), bem abaixo do orçamento de 3 s.
-  3. **Nenhum socket paralelo é aberto.** A *factory* fake contabiliza sockets
-     criados/vivos: o pico de sockets simultâneos nunca passa de 1, tanto numa
-     reconexão por queda quanto numa reconexão para um novo alvo (o socket antigo
-     é cancelado antes de abrir o novo). ``RemoteSession`` é a única fonte de
-     verdade da conexão.
+     backoff inicial (500 ms virtuais), bem abaixo do orÃ§amento de 3 s.
+  3. **Nenhum socket paralelo Ã© aberto.** A *factory* fake contabiliza sockets
+     criados/vivos: o pico de sockets simultÃ¢neos nunca passa de 1, tanto numa
+     reconexÃ£o por queda quanto numa reconexÃ£o para um novo alvo (o socket antigo
+     Ã© cancelado antes de abrir o novo). ``RemoteSession`` Ã© a Ãºnica fonte de
+     verdade da conexÃ£o.
 
 Strategy
 --------
-Seguindo a convenção do repositório (executar o **código real** numa JVM desktop
-em vez de só inspecionar fontes), compilamos os fontes Kotlin reais
+Seguindo a convenÃ§Ã£o do repositÃ³rio (executar o **cÃ³digo real** numa JVM desktop
+em vez de sÃ³ inspecionar fontes), compilamos os fontes Kotlin reais
 (``RemoteSession`` + ``ConnectionState`` + modelos + ``TizenProtocol``) contra:
 
-  * *shims* puros de ``javax.inject`` e ``org.json`` (mesma semântica usada pelo
-    serializador, com ``toString()`` compacto e ordem de inserção); e
-  * ``kotlinx-coroutines-test`` para acionar a sessão em **tempo virtual**, de
-    modo que o backoff/reconexão é determinístico e medível em milissegundos
+  * *shims* puros de ``javax.inject`` e ``org.json`` (mesma semÃ¢ntica usada pelo
+    serializador, com ``toString()`` compacto e ordem de inserÃ§Ã£o); e
+  * ``kotlinx-coroutines-test`` para acionar a sessÃ£o em **tempo virtual**, de
+    modo que o backoff/reconexÃ£o Ã© determinÃ­stico e medÃ­vel em milissegundos
     simulados.
 
-A conexão é dirigida por um ``WebSocket.Factory`` **fake** que captura a URL
-montada por ``RemoteSession``, entrega ``onOpen`` para levar a sessão a
-``Connected``, registra os frames enviados e contabiliza sockets vivos — o mesmo
-ponto de extensão que o design expõe (``socketFactory: WebSocket.Factory``).
-Isso exercita o caminho genuíno: loop de manutenção -> canal -> StateFlow ->
-backoff -> reconexão.
+A conexÃ£o Ã© dirigida por um ``WebSocket.Factory`` **fake** que captura a URL
+montada por ``RemoteSession``, entrega ``onOpen`` para levar a sessÃ£o a
+``Connected``, registra os frames enviados e contabiliza sockets vivos â€” o mesmo
+ponto de extensÃ£o que o design expÃµe (``socketFactory: WebSocket.Factory``).
+Isso exercita o caminho genuÃ­no: loop de manutenÃ§Ã£o -> canal -> StateFlow ->
+backoff -> reconexÃ£o.
 
 Se o toolchain Kotlin/JDK ou os jars (okhttp/okio/coroutines/coroutines-test)
-não forem localizados nos caches do Gradle, os testes comportamentais dão
-``skip``; as asserções estruturais sempre rodam.
+nÃ£o forem localizados nos caches do Gradle, os testes comportamentais dÃ£o
+``skip``; as asserÃ§Ãµes estruturais sempre rodam.
 """
 
 import base64
@@ -87,7 +87,7 @@ def _read(path: Path) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# Shims — pure annotations + org.json (compact toString, insertion order).
+# Shims â€” pure annotations + org.json (compact toString, insertion order).
 # --------------------------------------------------------------------------- #
 INJECT_SHIM = r'''package javax.inject
 
@@ -131,6 +131,8 @@ internal fun writeValue(sb: StringBuilder, value: Any?) {
 class JSONArray {
     val items = ArrayList<Any?>()
     fun put(value: Any?): JSONArray { items.add(value); return this }
+    fun length(): Int = items.size
+    fun optJSONObject(index: Int): JSONObject? = items.getOrNull(index) as? JSONObject
     override fun toString(): String {
         val sb = StringBuilder("[")
         for ((i, v) in items.withIndex()) { if (i > 0) sb.append(','); writeValue(sb, v) }
@@ -159,6 +161,8 @@ class JSONObject {
         return v.toString()
     }
     fun optJSONObject(name: String): JSONObject? = map[name] as? JSONObject
+    fun optJSONArray(name: String): JSONArray? = map[name] as? JSONArray
+    fun optInt(name: String, fallback: Int = 0): Int = (map[name] as? Int) ?: fallback
     internal fun putRaw(name: String, value: Any?) { map[name] = value }
     override fun toString(): String {
         val sb = StringBuilder("{")
@@ -254,7 +258,7 @@ class JSONParser(private val s: String) {
 '''
 
 # --------------------------------------------------------------------------- #
-# Harness — drives the REAL RemoteSession via a fake socket in virtual time.
+# Harness â€” drives the REAL RemoteSession via a fake socket in virtual time.
 # --------------------------------------------------------------------------- #
 HARNESS_KT = r'''import com.factory.samsungremote.data.registry.KeyCategory
 import com.factory.samsungremote.data.registry.RemoteKey
@@ -500,16 +504,16 @@ def _parse_kv(stdout):
 
 
 # --------------------------------------------------------------------------- #
-# Behavioural fixture — compile real sources + harness, run once.
+# Behavioural fixture â€” compile real sources + harness, run once.
 # --------------------------------------------------------------------------- #
 @pytest.fixture(scope="module")
 def out(tmp_path_factory):
     tc = _toolchain()
     if tc["missing"]:
-        pytest.skip("toolchain/jars indisponíveis: " + ", ".join(tc["missing"]))
+        pytest.skip("toolchain/jars indisponÃ­veis: " + ", ".join(tc["missing"]))
     for s in REAL_SOURCES:
         if not s.is_file():
-            pytest.fail(f"fonte da sessão ausente: {s}")
+            pytest.fail(f"fonte da sessÃ£o ausente: {s}")
 
     tmp = tmp_path_factory.mktemp("session")
     src = tmp / "src"
@@ -538,7 +542,7 @@ def out(tmp_path_factory):
     ]
     cr = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
     assert cr.returncode == 0, (
-        "compilação da sessão falhou:\n" + (cr.stdout or "") + (cr.stderr or "")
+        "compilaÃ§Ã£o da sessÃ£o falhou:\n" + (cr.stdout or "") + (cr.stderr or "")
     )
 
     run_cp = os.pathsep.join(str(p) for p in [out_dir, *link_libs])
@@ -547,16 +551,16 @@ def out(tmp_path_factory):
         capture_output=True, text=True, timeout=120,
     )
     assert run.returncode == 0, (
-        "execução do harness da sessão falhou:\n" + (run.stdout or "") + (run.stderr or "")
+        "execuÃ§Ã£o do harness da sessÃ£o falhou:\n" + (run.stdout or "") + (run.stderr or "")
     )
     return _parse_kv(run.stdout)
 
 
 # --------------------------------------------------------------------------- #
-# Criterion 1 — sending a key writes the expected frame to the open socket.
+# Criterion 1 â€” sending a key writes the expected frame to the open socket.
 # --------------------------------------------------------------------------- #
 def test_connect_reaches_connected_state(out):
-    assert out.get("A_state_after_connect") == "Connected", f"sessão não conectou: {out!r}"
+    assert out.get("A_state_after_connect") == "Connected", f"sessÃ£o nÃ£o conectou: {out!r}"
 
 
 def test_send_key_writes_expected_frame(out):
@@ -567,12 +571,12 @@ def test_send_key_writes_expected_frame(out):
 
 
 def test_send_key_before_connect_is_safe_noop(out):
-    # Sem socket aberto, sendKey não lança e sinaliza falha (a UI reage ao state).
+    # Sem socket aberto, sendKey nÃ£o lanÃ§a e sinaliza falha (a UI reage ao state).
     assert out.get("A_send_before") == "false"
 
 
 def test_control_url_targets_secure_endpoint(out):
-    # OkHttp normaliza wss:// -> https:// ao montar a Request; o destino é o mesmo.
+    # OkHttp normaliza wss:// -> https:// ao montar a Request; o destino Ã© o mesmo.
     assert out.get("A_scheme") == "https"
     assert out.get("A_host") == "192.168.0.50"
     assert out.get("A_port") == "8002"
@@ -591,7 +595,7 @@ def test_single_socket_on_first_connect(out):
 
 
 # --------------------------------------------------------------------------- #
-# Criterion 2 — a dropped link reconnects automatically, back to Connected,
+# Criterion 2 â€” a dropped link reconnects automatically, back to Connected,
 #               in well under 3 simulated seconds.
 # --------------------------------------------------------------------------- #
 def test_drop_triggers_reconnecting_state(out):
@@ -602,34 +606,34 @@ def test_drop_triggers_reconnecting_state(out):
 
 
 def test_reconnects_back_to_connected(out):
-    assert out.get("B_state2") == "Connected", "estado não voltou a Connected após a queda"
+    assert out.get("B_state2") == "Connected", "estado nÃ£o voltou a Connected apÃ³s a queda"
 
 
 def test_reconnection_within_three_simulated_seconds(out):
     elapsed = int(out.get("B_elapsed", "999999"))
-    assert 0 < elapsed < 3000, f"reconexão demorou {elapsed} ms simulados (orçamento < 3000)"
+    assert 0 < elapsed < 3000, f"reconexÃ£o demorou {elapsed} ms simulados (orÃ§amento < 3000)"
 
 
 def test_reconnection_opens_a_fresh_socket(out):
-    # Um socket no connect inicial, outro na reconexão.
+    # Um socket no connect inicial, outro na reconexÃ£o.
     assert out.get("B_created_after_connect") == "1"
     assert out.get("B_created_total") == "2"
 
 
 # --------------------------------------------------------------------------- #
-# Criterion 3 — no parallel socket is ever open (single source of truth).
+# Criterion 3 â€” no parallel socket is ever open (single source of truth).
 # --------------------------------------------------------------------------- #
 def test_no_parallel_socket_during_reconnection(out):
-    assert out.get("B_maxlive") == "1", "abriu socket paralelo durante a reconexão"
-    assert out.get("B_live_now") == "1", "deveria haver exatamente um socket vivo após reconectar"
+    assert out.get("B_maxlive") == "1", "abriu socket paralelo durante a reconexÃ£o"
+    assert out.get("B_live_now") == "1", "deveria haver exatamente um socket vivo apÃ³s reconectar"
 
 
 def test_reconnect_to_new_target_keeps_single_socket(out):
     assert out.get("C_state") == "Connected"
-    assert out.get("C_host") == "192.168.0.77", "não migrou para o novo alvo"
-    assert out.get("C_token") == "TKN-2", "token do novo alvo não foi reenviado na URL"
+    assert out.get("C_host") == "192.168.0.77", "nÃ£o migrou para o novo alvo"
+    assert out.get("C_token") == "TKN-2", "token do novo alvo nÃ£o foi reenviado na URL"
     assert out.get("C_created") == "2", "deveria ter criado exatamente dois sockets no total"
-    assert out.get("C_maxlive") == "1", "socket antigo não foi fechado antes de abrir o novo"
+    assert out.get("C_maxlive") == "1", "socket antigo nÃ£o foi fechado antes de abrir o novo"
     assert out.get("C_live_now") == "1"
 
 
@@ -650,7 +654,7 @@ def test_connection_state_models_lifecycle():
     text = _read(CONNECTION_STATE_KT)
     assert "sealed interface ConnectionState" in text
     for state in ("Connecting", "Connected", "Reconnecting", "Error", "Disconnected"):
-        assert state in text, f"estado de conexão ausente: {state}"
+        assert state in text, f"estado de conexÃ£o ausente: {state}"
 
 
 def test_session_exposes_state_as_stateflow():
@@ -664,7 +668,7 @@ def test_session_opens_secure_control_websocket():
     assert "wss" in text, "deve usar o esquema seguro wss"
     assert "8002" in text, "porta de controle 8002 ausente"
     assert CONTROL_PATH in text, "endpoint de controle samsung.remote.control ausente"
-    assert "WebSocket.Factory" in text, "deve abrir via WebSocket.Factory injetável"
+    assert "WebSocket.Factory" in text, "deve abrir via WebSocket.Factory injetÃ¡vel"
     assert "Base64" in text and "encodeToString" in text, "nome deve ser Base64-encoded"
 
 
@@ -677,13 +681,13 @@ def test_session_sends_keys_via_protocol():
 def test_session_reconnects_with_backoff():
     text = _read(REMOTE_SESSION_KT)
     assert "delay(" in text, "backoff deve usar delay"
-    assert "backoff" in text.lower(), "deve haver lógica de backoff"
+    assert "backoff" in text.lower(), "deve haver lÃ³gica de backoff"
     assert "Reconnecting" in text, "deve transitar por Reconnecting"
 
 
 def test_session_guards_a_single_socket():
     text = _read(REMOTE_SESSION_KT)
-    # Uma única fonte de verdade: socket atual rastreado + acesso serializado.
+    # Uma Ãºnica fonte de verdade: socket atual rastreado + acesso serializado.
     assert "currentSocket" in text, "deve rastrear o socket atual"
-    assert "Mutex" in text or "withLock" in text, "mudanças de conexão devem ser serializadas"
-    assert "cancelAndJoin" in text, "conexão anterior deve ser cancelada antes de reabrir"
+    assert "Mutex" in text or "withLock" in text, "mudanÃ§as de conexÃ£o devem ser serializadas"
+    assert "cancelAndJoin" in text, "conexÃ£o anterior deve ser cancelada antes de reabrir"

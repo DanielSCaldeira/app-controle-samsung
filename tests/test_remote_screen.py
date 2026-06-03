@@ -1,40 +1,40 @@
-"""Tests for task b8b43f30 — Tela de controle (RemoteScreen).
+﻿"""Tests for task b8b43f30 â€” Tela de controle (RemoteScreen).
 
-D-pad (cima/baixo/esquerda/direita/OK), botões RETURN/HOME/MENU e POWER, ligados
+D-pad (cima/baixo/esquerda/direita/OK), botÃµes RETURN/HOME/MENU e POWER, ligados
 ao RemoteViewModel.
 
 Acceptance criteria verificados aqui:
-  1. **Tocar cada direção/OK/HOME (e RETURN/MENU/POWER) dispara o intent
-     correspondente no ViewModel (verificado com fake).** A tela Compose é
+  1. **Tocar cada direÃ§Ã£o/OK/HOME (e RETURN/MENU/POWER) dispara o intent
+     correspondente no ViewModel (verificado com fake).** A tela Compose Ã©
      *stateless*: cada controle resolve seu ``RemoteKey`` no ``RemoteKeyCatalog``
-     (pelos mesmos códigos ``KEY_*`` que a tela usa) e emite
-     ``RemoteIntent.PressKey`` via ``onIntent``. Como o runtime Compose não roda
-     na JVM desktop, provamos *comportamentalmente* o elo crítico: para CADA um
-     dos 9 controles, a tecla do catálogo, roteada pelo ``RemoteViewModel`` REAL
+     (pelos mesmos cÃ³digos ``KEY_*`` que a tela usa) e emite
+     ``RemoteIntent.PressKey`` via ``onIntent``. Como o runtime Compose nÃ£o roda
+     na JVM desktop, provamos *comportamentalmente* o elo crÃ­tico: para CADA um
+     dos 9 controles, a tecla do catÃ¡logo, roteada pelo ``RemoteViewModel`` REAL
      ligado a um transporte *fake* (gravador), produz exatamente o frame
-     ``SendRemoteKey`` com o ``DataOfCmd`` daquela tecla — e os 9 frames são
-     distintos (nenhum controle está fixado na tecla de outro). O comportamento
-     "toque → intent" sobre o runtime Compose é coberto pelo teste de UI
+     ``SendRemoteKey`` com o ``DataOfCmd`` daquela tecla â€” e os 9 frames sÃ£o
+     distintos (nenhum controle estÃ¡ fixado na tecla de outro). O comportamento
+     "toque â†’ intent" sobre o runtime Compose Ã© coberto pelo teste de UI
      instrumentado real (ver ``test_compose_ui_test_authored``).
-  2. **Alvos de toque ≥ 48 dp.** Verificado estruturalmente: a tela define um
-     ``MinTouchTarget`` ≥ 48 dp e o aplica (``Modifier.sizeIn(minWidth=…,
-     minHeight=…)``) em todo controle. O teste de UI instrumentado também o
+  2. **Alvos de toque â‰¥ 48 dp.** Verificado estruturalmente: a tela define um
+     ``MinTouchTarget`` â‰¥ 48 dp e o aplica (``Modifier.sizeIn(minWidth=â€¦,
+     minHeight=â€¦)``) em todo controle. O teste de UI instrumentado tambÃ©m o
      verifica em runtime (``assertWidthIsAtLeast``/``assertHeightIsAtLeast``).
 
 Strategy
 --------
-Seguindo a convenção do repositório (executar o **código real** numa JVM desktop
-em vez de só inspecionar fontes), compilamos os fontes Kotlin reais
+Seguindo a convenÃ§Ã£o do repositÃ³rio (executar o **cÃ³digo real** numa JVM desktop
+em vez de sÃ³ inspecionar fontes), compilamos os fontes Kotlin reais
 (``RemoteKeyCatalog`` + ``RemoteViewModel`` + ``CommandRepository`` +
 ``RemoteSession`` + modelos + ``TizenProtocol``) contra *shims* puros de
 ``javax.inject``, ``org.json``, ``androidx.lifecycle`` e ``dagger.hilt`` (mais
-``kotlinx-coroutines`` + ``okhttp``/``okio`` reais para construir a sessão). O
-harness percorre os 9 controles da tela, resolve cada tecla no catálogo e a
+``kotlinx-coroutines`` + ``okhttp``/``okio`` reais para construir a sessÃ£o). O
+harness percorre os 9 controles da tela, resolve cada tecla no catÃ¡logo e a
 roteia pelo ViewModel real ligado a um ``CommandTransport`` *fake* que grava os
 frames.
 
-Se o toolchain Kotlin/JDK ou os jars não forem localizados nos caches do Gradle,
-os testes comportamentais dão ``skip``; as asserções estruturais sempre rodam.
+Se o toolchain Kotlin/JDK ou os jars nÃ£o forem localizados nos caches do Gradle,
+os testes comportamentais dÃ£o ``skip``; as asserÃ§Ãµes estruturais sempre rodam.
 """
 
 import os
@@ -106,7 +106,7 @@ def _key_frame(code: str) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# Shims — pure annotations, org.json, and the Android/Hilt symbols the
+# Shims â€” pure annotations, org.json, and the Android/Hilt symbols the
 # ViewModel links against. (Shared, verbatim, with test_remote_viewmodel.py so
 # the real ViewModel/repository/session link without an Android runtime.)
 # --------------------------------------------------------------------------- #
@@ -166,6 +166,8 @@ internal fun writeValue(sb: StringBuilder, value: Any?) {
 class JSONArray {
     val items = ArrayList<Any?>()
     fun put(value: Any?): JSONArray { items.add(value); return this }
+    fun length(): Int = items.size
+    fun optJSONObject(index: Int): JSONObject? = items.getOrNull(index) as? JSONObject
     override fun toString(): String {
         val sb = StringBuilder("[")
         for ((i, v) in items.withIndex()) { if (i > 0) sb.append(','); writeValue(sb, v) }
@@ -194,6 +196,8 @@ class JSONObject {
         return v.toString()
     }
     fun optJSONObject(name: String): JSONObject? = map[name] as? JSONObject
+    fun optJSONArray(name: String): JSONArray? = map[name] as? JSONArray
+    fun optInt(name: String, fallback: Int = 0): Int = (map[name] as? Int) ?: fallback
     internal fun putRaw(name: String, value: Any?) { map[name] = value }
     override fun toString(): String {
         val sb = StringBuilder("{")
@@ -289,7 +293,7 @@ class JSONParser(private val s: String) {
 '''
 
 # --------------------------------------------------------------------------- #
-# Harness — reproduces what RemoteScreen does for every control: resolve the
+# Harness â€” reproduces what RemoteScreen does for every control: resolve the
 # RemoteKey from RemoteKeyCatalog (by the same KEY_* code the screen uses) and
 # route RemoteIntent.PressKey(key) through the REAL RemoteViewModel, ligado a um
 # transporte fake gravador. Emits "code|frame" per control.
@@ -421,13 +425,13 @@ def _parse_lines(stdout):
 
 
 # --------------------------------------------------------------------------- #
-# Behavioural fixture — compile real sources + harness, run once.
+# Behavioural fixture â€” compile real sources + harness, run once.
 # --------------------------------------------------------------------------- #
 @pytest.fixture(scope="module")
 def out(tmp_path_factory):
     tc = _toolchain()
     if tc["missing"]:
-        pytest.skip("toolchain/jars indisponíveis: " + ", ".join(tc["missing"]))
+        pytest.skip("toolchain/jars indisponÃ­veis: " + ", ".join(tc["missing"]))
     for s in REAL_SOURCES:
         if not s.is_file():
             pytest.fail(f"fonte ausente: {s}")
@@ -463,7 +467,7 @@ def out(tmp_path_factory):
     ]
     cr = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
     assert cr.returncode == 0, (
-        "compilação do RemoteScreen harness falhou:\n" + (cr.stdout or "") + (cr.stderr or "")
+        "compilaÃ§Ã£o do RemoteScreen harness falhou:\n" + (cr.stdout or "") + (cr.stderr or "")
     )
 
     run_cp = os.pathsep.join(str(p) for p in [out_dir, *link_libs])
@@ -472,30 +476,30 @@ def out(tmp_path_factory):
         capture_output=True, text=True, timeout=120,
     )
     assert run.returncode == 0, (
-        "execução do harness falhou:\n" + (run.stdout or "") + (run.stderr or "")
+        "execuÃ§Ã£o do harness falhou:\n" + (run.stdout or "") + (run.stderr or "")
     )
     return _parse_lines(run.stdout)
 
 
 # --------------------------------------------------------------------------- #
-# Criterion 1 — every control routes to the correct intent/frame (with fake).
+# Criterion 1 â€” every control routes to the correct intent/frame (with fake).
 # --------------------------------------------------------------------------- #
 @pytest.mark.parametrize("_tag,code", CONTROLS)
 def test_each_control_routes_to_its_key(out, _tag, code):
     # The catalog lookup the screen performs must resolve (not <<MISSING>>)...
     frame = out.get(code)
-    assert frame is not None, f"harness não emitiu o controle {code}: {out!r}"
+    assert frame is not None, f"harness nÃ£o emitiu o controle {code}: {out!r}"
     assert frame != "<<MISSING>>", f"tecla {code} ausente no RemoteKeyCatalog"
     # ...and pressing it emits exactly the SendRemoteKey frame for that code.
     assert frame == _key_frame(code), (
-        f"controle {code} não roteou o frame correto: {frame!r}"
+        f"controle {code} nÃ£o roteou o frame correto: {frame!r}"
     )
 
 
 def test_all_nine_controls_emit_distinct_frames(out):
     frames = [out.get(code) for _tag, code in CONTROLS]
     assert all(f and f != "<<MISSING>>" for f in frames), f"controle faltando: {frames!r}"
-    # No control is hard-coded to another's key — 9 controls, 9 distinct frames.
+    # No control is hard-coded to another's key â€” 9 controls, 9 distinct frames.
     assert len(set(frames)) == len(CONTROLS), f"frames duplicados entre controles: {frames!r}"
 
 
@@ -505,7 +509,7 @@ def test_each_press_forwards_exactly_one_frame(out):
 
 
 # --------------------------------------------------------------------------- #
-# Structural — the Compose screen wiring (always run, no toolchain required).
+# Structural â€” the Compose screen wiring (always run, no toolchain required).
 # --------------------------------------------------------------------------- #
 def test_screen_present():
     assert SCREEN_KT.is_file(), f"RemoteScreen ausente: {SCREEN_KT}"
@@ -523,7 +527,7 @@ def test_screen_defines_test_tags_for_every_control():
     text = _read(SCREEN_KT)
     for tag, _code in CONTROLS:
         assert tag in text, f"test tag '{tag}' ausente na tela"
-    assert "testTag" in text, "os controles devem expor testTags estáveis"
+    assert "testTag" in text, "os controles devem expor testTags estÃ¡veis"
 
 
 def test_screen_resolves_each_control_from_catalog_by_code():
@@ -532,7 +536,7 @@ def test_screen_resolves_each_control_from_catalog_by_code():
     text = _read(SCREEN_KT)
     assert "RemoteKeyCatalog" in text, "a tela deve resolver teclas via RemoteKeyCatalog"
     for _tag, code in CONTROLS:
-        assert code in text, f"código {code} não referenciado pela tela"
+        assert code in text, f"cÃ³digo {code} nÃ£o referenciado pela tela"
 
 
 def test_screen_enforces_min_touch_target_of_48dp():
@@ -541,9 +545,9 @@ def test_screen_enforces_min_touch_target_of_48dp():
     m = re.search(r"MinTouchTarget\s*=\s*(\d+(?:\.\d+)?)\s*\.dp", text)
     assert m, "a tela deve definir um MinTouchTarget em dp"
     value = float(m.group(1))
-    assert value >= 48, f"alvo de toque mínimo deve ser >= 48 dp, mas é {value} dp"
+    assert value >= 48, f"alvo de toque mÃ­nimo deve ser >= 48 dp, mas Ã© {value} dp"
     assert "sizeIn(minWidth = MinTouchTarget, minHeight = MinTouchTarget)" in text, (
-        "todo controle deve aplicar o alvo mínimo via Modifier.sizeIn"
+        "todo controle deve aplicar o alvo mÃ­nimo via Modifier.sizeIn"
     )
 
 
@@ -554,7 +558,7 @@ def test_route_observes_viewmodel_and_forwards_intents():
 
 
 # --------------------------------------------------------------------------- #
-# Criterion (UI) — the instrumented Compose UI test artifact exists and is real.
+# Criterion (UI) â€” the instrumented Compose UI test artifact exists and is real.
 # --------------------------------------------------------------------------- #
 def test_compose_ui_test_authored():
     assert UI_TEST_KT.is_file(), f"teste de UI Compose ausente: {UI_TEST_KT}"
@@ -569,5 +573,5 @@ def test_compose_ui_test_authored():
     )
     # The D-pad directions, OK and HOME are all exercised.
     for tag, _code in CONTROLS:
-        assert f"RemoteTestTags.{tag}" in text, f"teste de UI não exercita o controle {tag}"
+        assert f"RemoteTestTags.{tag}" in text, f"teste de UI nÃ£o exercita o controle {tag}"
     assert "@Test" in text

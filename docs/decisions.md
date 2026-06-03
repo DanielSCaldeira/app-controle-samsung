@@ -241,3 +241,38 @@ confiável em Tizen 2020+; o usuário pode precisar usar o teclado on-screen via
 **Alternativas.** *Manter só o WebSocket* — descartado: é a causa do bug. *Codificar o
 texto char-a-char via teclas* — frágil e lento, sem garantia de foco. *Remover o campo
 de texto* — pioraria a UX sem necessidade, já que o REST IME funciona em parte dos sets.
+
+## ADR-0011 — Descoberta de apps instalados em runtime (`ed.installedApp.get`)
+
+**Status:** Accepted · 2026-06-03
+
+**Contexto.** O catálogo de atalhos usava appIds fixos, mas eles **variam por
+modelo/região/firmware** — o appId do Netflix antigo (`11101200001`) dá 404 na TV 2024
+testada, enquanto `3201907018807` abre (ver ADR-0010). Manter IDs fixos é frágil: cada
+TV pode ter IDs diferentes, e o usuário pediu que o app "descubra e se adapte" a cada TV.
+
+**Decisão.** Descobrir os apps **em runtime** pela conexão WebSocket de controle já
+aberta: ao abrir o socket, `RemoteSession` envia `ms.channel.emit` /
+`ed.installedApp.get`; a TV responde com a lista sob `data.data` (cada item com `appId`,
+`name`, `app_type`, `icon`). O parse fica isolado em `TizenProtocol.parseInstalledApps`,
+e a lista é exposta como `RemoteSession.installedApps: StateFlow<List<InstalledApp>>`
+(reexposta pelo `RemoteViewModel`), limpa a cada `connect()`. Na UI:
+
+- os **atalhos curados** (Favoritos) resolvem o appId real pela lista descoberta
+  (match por id, depois por nome — `resolveAppId`), caindo no id fixo do catálogo como
+  reserva enquanto a descoberta não chega;
+- abaixo, uma seção **"Todos os apps da TV"** lista todos os apps instalados, cada um
+  lançado pelo seu próprio `appId` (sempre correto para aquele aparelho).
+
+**Consequências.** (+) O remoto se adapta a qualquer TV Samsung sem catálogo fixo; os
+botões curados deixam de quebrar por ID errado. (+) Reaproveita o socket de controle —
+sem nova conexão. (+) Degrada bem: sem resposta, os Favoritos usam o id de reserva e a
+lista completa só aparece quando há dados. (+) Cobertura JVM: `TizenProtocolInstalledAppsTest`
+(request + parse) e `RemoteSessionInstalledAppsTest` (pede no open e publica o reply).
+(−) Os nomes vindos da TV variam (ex.: "Amazon Prime Video"), então o match dos Favoritos
+é heurístico (id → nome exato → contém). (−) Ícones reais (via `http://<ip>:8001<icon>`)
+ainda não são renderizados — usa-se a inicial; fica como melhoria futura.
+
+**Alternativas.** *Catálogo fixo de IDs* — descartado: é a causa do bug (IDs variam).
+*Hard-code por modelo* — inviável de manter. *Só Favoritos com IDs resolvidos (sem lista
+completa)* — preterido: o usuário escolheu também expor todos os apps da TV.

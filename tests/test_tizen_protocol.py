@@ -1,4 +1,4 @@
-"""Tests for task d80f0027 — Modelo de mensagens do protocolo Tizen.
+﻿"""Tests for task d80f0027 â€” Modelo de mensagens do protocolo Tizen.
 
 Acceptance criteria verified here (behaviourally):
   1. sendKey serializes ms.remote.control / SendRemoteKey with Click/Press/Release
@@ -15,7 +15,7 @@ TizenProtocol is Kotlin and depends on ``org.json`` (provided by Android at
 runtime, absent from a desktop JVM). To exercise the *real* protocol code we
 compile ``TizenProtocol.kt`` together with a tiny, behaviour-compatible
 ``org.json`` shim (insertion-ordered objects, compact ``toString()``, JSON null
-sentinel — identical semantics to Android's org.json for the operations used)
+sentinel â€” identical semantics to Android's org.json for the operations used)
 and a small harness, then run it and assert on the produced output.
 
 This mirrors the repository convention (pytest is the test runner) while
@@ -82,6 +82,8 @@ internal fun writeValue(sb: StringBuilder, value: Any?) {
 class JSONArray {
     val items = ArrayList<Any?>()
     fun put(value: Any?): JSONArray { items.add(value); return this }
+    fun length(): Int = items.size
+    fun optJSONObject(index: Int): JSONObject? = items.getOrNull(index) as? JSONObject
     override fun toString(): String {
         val sb = StringBuilder("[")
         for ((i, v) in items.withIndex()) { if (i > 0) sb.append(','); writeValue(sb, v) }
@@ -110,6 +112,8 @@ class JSONObject {
         return v.toString()
     }
     fun optJSONObject(name: String): JSONObject? = map[name] as? JSONObject
+    fun optJSONArray(name: String): JSONArray? = map[name] as? JSONArray
+    fun optInt(name: String, fallback: Int = 0): Int = (map[name] as? Int) ?: fallback
     internal fun putRaw(name: String, value: Any?) { map[name] = value }
     override fun toString(): String {
         val sb = StringBuilder("{")
@@ -309,12 +313,12 @@ def _compile_and_run(tmp_path):
     ]
     cr = subprocess.run(compile_cmd, capture_output=True, text=True, timeout=600)
     assert cr.returncode == 0, (
-        "compilação do TizenProtocol falhou:\n" + (cr.stdout or "") + (cr.stderr or "")
+        "compilaÃ§Ã£o do TizenProtocol falhou:\n" + (cr.stdout or "") + (cr.stderr or "")
     )
 
     run_cmd = [tc["java"], "-cp", sep.join([str(out), str(tc["stdlib"])]), "HarnessKt"]
     rr = subprocess.run(run_cmd, capture_output=True, text=True, timeout=120)
-    assert rr.returncode == 0, "execução do harness falhou:\n" + (rr.stdout or "") + (rr.stderr or "")
+    assert rr.returncode == 0, "execuÃ§Ã£o do harness falhou:\n" + (rr.stdout or "") + (rr.stderr or "")
 
     result = {}
     for line in rr.stdout.splitlines():
@@ -330,7 +334,7 @@ def outputs(tmp_path_factory):
 
 
 # --------------------------------------------------------------------------- #
-# Criterion 1 — sendKey (Click / Press / Release)
+# Criterion 1 â€” sendKey (Click / Press / Release)
 # --------------------------------------------------------------------------- #
 def test_send_key_click(outputs):
     assert outputs["sendKey_click"] == (
@@ -354,7 +358,7 @@ def test_send_key_release(outputs):
 
 
 # --------------------------------------------------------------------------- #
-# Criterion 2 — launchApp (ed.apps.launch)
+# Criterion 2 â€” launchApp (ed.apps.launch)
 # --------------------------------------------------------------------------- #
 def test_launch_app_deep_link(outputs):
     assert outputs["launchApp_default"] == (
@@ -371,7 +375,7 @@ def test_launch_app_native(outputs):
 
 
 # --------------------------------------------------------------------------- #
-# Criterion 3 — sendText (Base64 / SendInputString)
+# Criterion 3 â€” sendText (Base64 / SendInputString)
 # --------------------------------------------------------------------------- #
 def test_send_text_base64(outputs):
     # "hi" -> base64 "aGk="
@@ -390,7 +394,7 @@ def test_send_text_base64_longer(outputs):
 
 
 # --------------------------------------------------------------------------- #
-# Criterion 4 — parsing data.token
+# Criterion 4 â€” parsing data.token
 # --------------------------------------------------------------------------- #
 def test_parse_token_happy_path(outputs):
     assert outputs["parseToken"] == "45784122"

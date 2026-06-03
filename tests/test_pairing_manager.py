@@ -1,40 +1,40 @@
-"""Tests for task e367750f — PairingManager: handshake e obtenção de token.
+﻿"""Tests for task e367750f â€” PairingManager: handshake e obtenÃ§Ã£o de token.
 
 Acceptance criteria verified here (behaviourally):
-  1. Um **WebSocket fake** (no espírito do MockWebServer) simula a resposta de
+  1. Um **WebSocket fake** (no espÃ­rito do MockWebServer) simula a resposta de
      handshake do TV carregando ``data.token``; confirma-se que o
      ``PairingManager`` *extrai* o token e o *persiste* via ``TvRegistry``
-     (cifrado — nunca em claro no "banco").
-  2. Falha de autorização (``ms.channel.unauthorized``) **propaga um erro
-     tratável** (``PairingException`` com ``reason = UNAUTHORIZED``) e nada é
-     persistido; o mesmo vale para falha de conexão (``onFailure`` ->
+     (cifrado â€” nunca em claro no "banco").
+  2. Falha de autorizaÃ§Ã£o (``ms.channel.unauthorized``) **propaga um erro
+     tratÃ¡vel** (``PairingException`` com ``reason = UNAUTHORIZED``) e nada Ã©
+     persistido; o mesmo vale para falha de conexÃ£o (``onFailure`` ->
      ``CONNECTION_FAILED`` preservando a causa) e fechamento sem token
      (``onClosed`` -> ``NO_TOKEN``).
-  3. Renovação: se já há token guardado, ele é reenviado na query (``token=``);
-     o TV reconfirmando sem novo token mantém o token; reemitindo um novo token
-     a rotação é persistida.
+  3. RenovaÃ§Ã£o: se jÃ¡ hÃ¡ token guardado, ele Ã© reenviado na query (``token=``);
+     o TV reconfirmando sem novo token mantÃ©m o token; reemitindo um novo token
+     a rotaÃ§Ã£o Ã© persistida.
 
 Strategy
 --------
-Seguindo a convenção do repositório (executar o **código real** num JVM desktop
-em vez de só inspecionar fontes), compilamos os fontes Kotlin reais do pairing —
-``PairingManager`` + ``PairingException`` — junto com o ``TvRegistry`` real,
+Seguindo a convenÃ§Ã£o do repositÃ³rio (executar o **cÃ³digo real** num JVM desktop
+em vez de sÃ³ inspecionar fontes), compilamos os fontes Kotlin reais do pairing â€”
+``PairingManager`` + ``PairingException`` â€” junto com o ``TvRegistry`` real,
 ``TizenProtocol`` real e seus modelos, contra:
 
-  * pequenos *shims* de anotações puras (``androidx.room.*``, ``javax.inject.*``)
-    e um shim de ``org.json`` com a mesma semântica usada pelo parser; e
-  * um ``KnownTvDao`` in-memory + um ``TokenCipher`` reversível de referência,
+  * pequenos *shims* de anotaÃ§Ãµes puras (``androidx.room.*``, ``javax.inject.*``)
+    e um shim de ``org.json`` com a mesma semÃ¢ntica usada pelo parser; e
+  * um ``KnownTvDao`` in-memory + um ``TokenCipher`` reversÃ­vel de referÃªncia,
     de modo que o ``TvRegistry`` real roda de ponta a ponta.
 
-O handshake é dirigido por um ``WebSocket.Factory`` **fake** que captura a URL
+O handshake Ã© dirigido por um ``WebSocket.Factory`` **fake** que captura a URL
 montada pelo ``PairingManager`` e injeta as mensagens/eventos do TV no
-``WebSocketListener`` real — exatamente o ponto de extensão que o design expõe
-(``socketFactory: WebSocket.Factory``). Isso exercita o caminho genuíno de
-``suspendCancellableCoroutine`` -> parse -> persistência.
+``WebSocketListener`` real â€” exatamente o ponto de extensÃ£o que o design expÃµe
+(``socketFactory: WebSocket.Factory``). Isso exercita o caminho genuÃ­no de
+``suspendCancellableCoroutine`` -> parse -> persistÃªncia.
 
-Se o toolchain Kotlin/JDK ou os jars (okhttp/okio/coroutines) não forem
-localizados nos caches do Gradle, os testes comportamentais dão ``skip``; as
-asserções estruturais sempre rodam.
+Se o toolchain Kotlin/JDK ou os jars (okhttp/okio/coroutines) nÃ£o forem
+localizados nos caches do Gradle, os testes comportamentais dÃ£o ``skip``; as
+asserÃ§Ãµes estruturais sempre rodam.
 """
 
 import base64
@@ -81,7 +81,7 @@ def _read(path: Path) -> str:
 
 
 # --------------------------------------------------------------------------- #
-# Shims — pure annotations + org.json (same semantics the code relies on).
+# Shims â€” pure annotations + org.json (same semantics the code relies on).
 # --------------------------------------------------------------------------- #
 ROOM_SHIM = r'''package androidx.room
 
@@ -115,6 +115,8 @@ object NULL { override fun toString(): String = "null" }
 class JSONArray {
     val items = ArrayList<Any?>()
     fun put(value: Any?): JSONArray { items.add(value); return this }
+    fun length(): Int = items.size
+    fun optJSONObject(index: Int): JSONObject? = items.getOrNull(index) as? JSONObject
 }
 
 class JSONObject {
@@ -138,6 +140,8 @@ class JSONObject {
         return v.toString()
     }
     fun optJSONObject(name: String): JSONObject? = map[name] as? JSONObject
+    fun optJSONArray(name: String): JSONArray? = map[name] as? JSONArray
+    fun optInt(name: String, fallback: Int = 0): Int = (map[name] as? Int) ?: fallback
     internal fun putRaw(name: String, value: Any?) { map[name] = value }
 }
 
@@ -224,7 +228,7 @@ class JSONParser(private val s: String) {
 '''
 
 # --------------------------------------------------------------------------- #
-# Harness — drives the REAL PairingManager + REAL TvRegistry via a fake socket.
+# Harness â€” drives the REAL PairingManager + REAL TvRegistry via a fake socket.
 # --------------------------------------------------------------------------- #
 HARNESS_KT = r'''import com.factory.samsungremote.data.crypto.TokenCipher
 import com.factory.samsungremote.data.crypto.TokenCipherException
@@ -298,7 +302,7 @@ fun p(k: String, v: Any?) = println("$k=$v")
 fun main() {
     val tv = DiscoveredTv("uuid:tv-1", "[TV] Sala", "192.168.0.50", "QN65")
 
-    // ---- A: happy path — TV delivers data.token; extract + persist ----
+    // ---- A: happy path â€” TV delivers data.token; extract + persist ----
     run {
         val dao = FakeDao(); val reg = TvRegistry(dao, FakeCipher())
         val factory = ScriptedFactory { ws, l ->
@@ -325,7 +329,7 @@ fun main() {
         }
     }
 
-    // ---- B: unauthorized — treatable error, nothing persisted ----
+    // ---- B: unauthorized â€” treatable error, nothing persisted ----
     run {
         val dao = FakeDao(); val reg = TvRegistry(dao, FakeCipher())
         val factory = ScriptedFactory { ws, l ->
@@ -344,7 +348,7 @@ fun main() {
         }
     }
 
-    // ---- C: connection failure — CONNECTION_FAILED preserving cause ----
+    // ---- C: connection failure â€” CONNECTION_FAILED preserving cause ----
     run {
         val dao = FakeDao(); val reg = TvRegistry(dao, FakeCipher())
         val factory = ScriptedFactory { ws, l ->
@@ -364,7 +368,7 @@ fun main() {
         }
     }
 
-    // ---- D: renewal — existing token replayed; TV reconfirms w/o new token ----
+    // ---- D: renewal â€” existing token replayed; TV reconfirms w/o new token ----
     run {
         val dao = FakeDao(); val reg = TvRegistry(dao, FakeCipher())
         runBlocking { reg.saveTv(KnownTv(id = tv.id, name = "old", ipAddress = "10.0.0.1"), "OLD-TOKEN") }
@@ -385,7 +389,7 @@ fun main() {
         }
     }
 
-    // ---- E: renewal with rotation — TV issues a NEW token ----
+    // ---- E: renewal with rotation â€” TV issues a NEW token ----
     run {
         val dao = FakeDao(); val reg = TvRegistry(dao, FakeCipher())
         runBlocking { reg.saveTv(KnownTv(id = tv.id, name = "old", ipAddress = "10.0.0.1"), "OLD-TOKEN") }
@@ -403,7 +407,7 @@ fun main() {
         }
     }
 
-    // ---- F: closed before any token — NO_TOKEN ----
+    // ---- F: closed before any token â€” NO_TOKEN ----
     run {
         val dao = FakeDao(); val reg = TvRegistry(dao, FakeCipher())
         val factory = ScriptedFactory { ws, l ->
@@ -491,13 +495,13 @@ def _parse_kv(stdout):
 
 
 # --------------------------------------------------------------------------- #
-# Behavioural fixture — compile real sources + harness, run once.
+# Behavioural fixture â€” compile real sources + harness, run once.
 # --------------------------------------------------------------------------- #
 @pytest.fixture(scope="module")
 def out(tmp_path_factory):
     tc = _toolchain()
     if tc["missing"]:
-        pytest.skip("toolchain/jars indisponíveis: " + ", ".join(tc["missing"]))
+        pytest.skip("toolchain/jars indisponÃ­veis: " + ", ".join(tc["missing"]))
     for s in REAL_SOURCES:
         if not s.is_file():
             pytest.fail(f"fonte do pairing ausente: {s}")
@@ -531,7 +535,7 @@ def out(tmp_path_factory):
     ]
     cr = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
     assert cr.returncode == 0, (
-        "compilação do pairing falhou:\n" + (cr.stdout or "") + (cr.stderr or "")
+        "compilaÃ§Ã£o do pairing falhou:\n" + (cr.stdout or "") + (cr.stderr or "")
     )
 
     run_cp = os.pathsep.join(str(p) for p in [out_dir, *link_libs])
@@ -540,13 +544,13 @@ def out(tmp_path_factory):
         capture_output=True, text=True, timeout=120,
     )
     assert run.returncode == 0, (
-        "execução do harness de pairing falhou:\n" + (run.stdout or "") + (run.stderr or "")
+        "execuÃ§Ã£o do harness de pairing falhou:\n" + (run.stdout or "") + (run.stderr or "")
     )
     return _parse_kv(run.stdout)
 
 
 # --------------------------------------------------------------------------- #
-# Criterion 1 — fake WebSocket delivers token; manager extracts + persists.
+# Criterion 1 â€” fake WebSocket delivers token; manager extracts + persists.
 # --------------------------------------------------------------------------- #
 def test_extracts_token_from_handshake(out):
     assert out.get("A_status") == "ok", f"handshake feliz falhou: {out!r}"
@@ -554,7 +558,7 @@ def test_extracts_token_from_handshake(out):
 
 
 def test_persists_token_via_registry(out):
-    # Recuperável (decifrado) pelo TvRegistry...
+    # RecuperÃ¡vel (decifrado) pelo TvRegistry...
     assert out.get("A_getToken") == "TOKEN-ABC-123"
     # ...e exatamente uma TV gravada.
     assert out.get("A_count") == "1"
@@ -564,7 +568,7 @@ def test_persisted_token_is_encrypted_not_clear_text(out):
     raw = out.get("A_raw")
     assert raw and raw != "TOKEN-ABC-123", "token gravado em claro"
     assert "TOKEN-ABC-123" not in raw, "token em claro vazou no valor persistido"
-    assert raw.startswith("enc::"), "token não passou pelo cipher antes de persistir"
+    assert raw.startswith("enc::"), "token nÃ£o passou pelo cipher antes de persistir"
 
 
 def test_persists_discovered_tv_metadata(out):
@@ -573,7 +577,7 @@ def test_persists_discovered_tv_metadata(out):
 
 
 def test_handshake_url_targets_secure_control_endpoint(out):
-    # OkHttp traduz wss:// -> https:// ao montar a Request; o destino é o mesmo.
+    # OkHttp traduz wss:// -> https:// ao montar a Request; o destino Ã© o mesmo.
     assert out.get("A_scheme") == "https"
     assert out.get("A_host") == "192.168.0.50"
     assert out.get("A_port") == "8002"
@@ -592,7 +596,7 @@ def test_fresh_pairing_sends_no_token_param(out):
 
 
 # --------------------------------------------------------------------------- #
-# Criterion 2 — failures propagate as treatable PairingException.
+# Criterion 2 â€” failures propagate as treatable PairingException.
 # --------------------------------------------------------------------------- #
 def test_unauthorized_propagates_treatable_error(out):
     assert out.get("B_status") == "pairing", f"esperado PairingException: {out!r}"
@@ -600,13 +604,13 @@ def test_unauthorized_propagates_treatable_error(out):
 
 
 def test_unauthorized_persists_nothing(out):
-    assert out.get("B_count") == "0", "nada deve ser persistido numa negação"
+    assert out.get("B_count") == "0", "nada deve ser persistido numa negaÃ§Ã£o"
 
 
 def test_connection_failure_is_treatable_and_keeps_cause(out):
     assert out.get("C_status") == "pairing"
     assert out.get("C_reason") == "CONNECTION_FAILED"
-    assert out.get("C_cause") == "IOException", "causa de transporte não preservada"
+    assert out.get("C_cause") == "IOException", "causa de transporte nÃ£o preservada"
     assert out.get("C_count") == "0"
 
 
@@ -617,17 +621,17 @@ def test_closed_without_token_yields_no_token_error(out):
 
 
 # --------------------------------------------------------------------------- #
-# Criterion 3 — renewal: replay stored token; keep or rotate.
+# Criterion 3 â€” renewal: replay stored token; keep or rotate.
 # --------------------------------------------------------------------------- #
 def test_renewal_replays_stored_token_in_url(out):
-    assert out.get("D_status") == "ok", f"renovação falhou: {out!r}"
-    assert out.get("D_tokenparam") == "OLD-TOKEN", "token existente não reenviado p/ renovação"
+    assert out.get("D_status") == "ok", f"renovaÃ§Ã£o falhou: {out!r}"
+    assert out.get("D_tokenparam") == "OLD-TOKEN", "token existente nÃ£o reenviado p/ renovaÃ§Ã£o"
 
 
 def test_renewal_without_new_token_keeps_existing(out):
     assert out.get("D_returned") == "OLD-TOKEN"
     assert out.get("D_getToken") == "OLD-TOKEN"
-    # Metadados da TV descoberta são atualizados ao reconfirmar.
+    # Metadados da TV descoberta sÃ£o atualizados ao reconfirmar.
     assert out.get("D_name") == "[TV] Sala"
     assert out.get("D_ip") == "192.168.0.50"
 
@@ -635,7 +639,7 @@ def test_renewal_without_new_token_keeps_existing(out):
 def test_renewal_with_rotation_persists_new_token(out):
     assert out.get("E_tokenparam") == "OLD-TOKEN", "token antigo deveria ser reenviado"
     assert out.get("E_returned") == "NEW-TOKEN-999"
-    assert out.get("E_getToken") == "NEW-TOKEN-999", "token rotacionado não foi persistido"
+    assert out.get("E_getToken") == "NEW-TOKEN-999", "token rotacionado nÃ£o foi persistido"
 
 
 # --------------------------------------------------------------------------- #
@@ -653,28 +657,28 @@ def test_manager_opens_secure_control_websocket():
     assert CONTROL_PATH in text, "endpoint de controle samsung.remote.control ausente"
     assert "name=" in text, "nome do controlador deve ir na query"
     assert "Base64" in text and "encodeToString" in text, "nome deve ser Base64-encoded"
-    assert "WebSocket.Factory" in text, "deve abrir via WebSocket.Factory injetável"
+    assert "WebSocket.Factory" in text, "deve abrir via WebSocket.Factory injetÃ¡vel"
 
 
 def test_manager_extracts_token_and_persists_via_registry():
     text = _read(PAIRING_MANAGER_KT)
     assert "TizenProtocol.parseEvent" in text or "TizenProtocol.parseToken" in text, \
-        "token deve ser extraído via TizenProtocol"
+        "token deve ser extraÃ­do via TizenProtocol"
     assert "registry.saveTv" in text, "token deve ser persistido via TvRegistry.saveTv"
-    assert "registry.getToken" in text, "token existente deve ser lido p/ renovação"
+    assert "registry.getToken" in text, "token existente deve ser lido p/ renovaÃ§Ã£o"
 
 
 def test_manager_maps_failures_to_pairing_exception():
     text = _read(PAIRING_MANAGER_KT)
     assert "onFailure" in text and "PairingException" in text
-    assert "ms.channel.unauthorized" in text, "negação de autorização deve ser tratada"
+    assert "ms.channel.unauthorized" in text, "negaÃ§Ã£o de autorizaÃ§Ã£o deve ser tratada"
     for reason in ("UNAUTHORIZED", "CONNECTION_FAILED", "NO_TOKEN"):
-        assert reason in text, f"razão de falha ausente: {reason}"
+        assert reason in text, f"razÃ£o de falha ausente: {reason}"
 
 
 def test_manager_replays_token_for_renewal():
     text = _read(PAIRING_MANAGER_KT)
-    assert "token=" in text, "renovação deve reenviar &token= na URL"
+    assert "token=" in text, "renovaÃ§Ã£o deve reenviar &token= na URL"
 
 
 def test_pairing_exception_is_treatable_with_reason_and_cause():
@@ -682,13 +686,13 @@ def test_pairing_exception_is_treatable_with_reason_and_cause():
     assert "enum class PairingFailureReason" in text
     assert "class PairingException" in text
     assert "Exception(message, cause)" in text, "deve preservar a causa subjacente"
-    assert "val reason" in text, "deve expor uma razão tratável para a UI"
+    assert "val reason" in text, "deve expor uma razÃ£o tratÃ¡vel para a UI"
 
 
 def test_lan_trust_manager_accepts_self_signed_for_session():
     text = _read(LAN_TRUST_KT)
     assert "X509TrustManager" in text
-    # Confiança relaxada apenas para a sessão LAN (cert auto-assinado da TV).
+    # ConfianÃ§a relaxada apenas para a sessÃ£o LAN (cert auto-assinado da TV).
     assert "checkServerTrusted" in text
-    assert "hostnameVerifier" in text, "CN do cert da TV não bate com o IP; verifier relaxado"
+    assert "hostnameVerifier" in text, "CN do cert da TV nÃ£o bate com o IP; verifier relaxado"
     assert "sslSocketFactory" in text, "client deve instalar o trust manager"
