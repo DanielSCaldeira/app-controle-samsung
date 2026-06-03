@@ -22,4 +22,35 @@ interface CommandTransport {
      *         [RemoteSession.state] instead of treating this as a hard error).
      */
     fun send(frame: String): Boolean
+
+    /**
+     * Launches the Tizen app [appId] on the connected TV.
+     *
+     * The default simply writes [fallbackFrame] (the legacy `ed.apps.launch`
+     * WebSocket emit the caller built via `TizenProtocol`), preserving the
+     * original behavior for fakes and older firmware. The production
+     * [RemoteSession] overrides this to prefer the REST endpoint
+     * (`POST /api/v2/applications/{appId}`), which 2020+ Tizen firmware honors
+     * when the WebSocket emit is silently dropped, falling back to
+     * [fallbackFrame] only if REST is unavailable (ADR-0010).
+     *
+     * @param appId         Tizen application id, used by the REST launch.
+     * @param fallbackFrame Pre-serialized WebSocket emit to use as the fallback.
+     * @return `true` if the launch was handed to a reachable channel.
+     */
+    fun launchApp(appId: String, fallbackFrame: String): Boolean = send(fallbackFrame)
+
+    /**
+     * Types [text] into the focused field on the connected TV.
+     *
+     * The default writes [fallbackFrame] (the legacy `SendInputString` frame).
+     * The production [RemoteSession] overrides this to prefer the REST IME
+     * endpoint, falling back to [fallbackFrame] when REST is unavailable
+     * (ADR-0010).
+     *
+     * @param text          Plain text to type, used by the REST IME call.
+     * @param fallbackFrame Pre-serialized WebSocket frame to use as the fallback.
+     * @return `true` if the text was handed to a reachable channel.
+     */
+    fun sendText(text: String, fallbackFrame: String): Boolean = send(fallbackFrame)
 }

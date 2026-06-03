@@ -59,10 +59,15 @@ object SessionModule {
     fun provideRemoteSession(
         @SessionWebSocketClient client: OkHttpClient,
         @SessionScope scope: CoroutineScope,
+        // REST control plane (app launch / text input on 2020+ firmware, ADR-0010)
+        // reuses the short-timeout plain-HTTP LAN client the discovery layer
+        // provides, since the REST API lives on the same `http://…:8001` plane.
+        @DiscoveryHttpClient restClient: OkHttpClient,
     ): RemoteSession = RemoteSession(
         // OkHttpClient implements WebSocket.Factory.
         socketFactory = client,
         scope = scope,
+        restHttpClient = restClient,
     )
 
     /**

@@ -43,7 +43,7 @@ class CommandRepository @Inject constructor(
      * Base64-encoded by the protocol layer).
      */
     fun sendText(text: String): Boolean =
-        transport.send(TizenProtocol.sendText(text))
+        transport.sendText(text, TizenProtocol.sendText(text))
 
     /**
      * Launches the Tizen app identified by [appId] (e.g. Netflix `11101200001`).
@@ -51,5 +51,5 @@ class CommandRepository @Inject constructor(
      * Maps to a `ms.channel.emit` / `ed.apps.launch` message.
      */
     fun launchApp(appId: String): Boolean =
-        transport.send(TizenProtocol.launchApp(appId))
+        transport.launchApp(appId, TizenProtocol.launchApp(appId))
 }

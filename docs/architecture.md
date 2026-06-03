@@ -187,6 +187,13 @@ mudança no formato quebra os testes de contrato de propósito e exige um novo a
 
 - `sendKey` aceita `CLICK` (padrão), `PRESS` e `RELEASE` (long-press).
 - `launchApp` aceita `DEEP_LINK` (padrão) e `NATIVE_LAUNCH`.
+- **Plano de controle REST (ADR-0010).** Em firmware Tizen 2020+ o WebSocket de
+  controle honra `SendRemoteKey`, mas ignora `ed.apps.launch` e `SendInputString`.
+  Por isso `RemoteSession` roteia launch e texto pelo REST em `http://<ip>:8001/api/v2/`
+  (OkHttp inline, reaproveitando o client LAN da descoberta), caindo de volta para o
+  frame WebSocket se o REST falhar:
+  `launchApp` → `POST /api/v2/applications/{appId}`; `sendText` →
+  `POST /api/v2/remoteControl/imeInput/{base64}?token={token}` (best-effort).
 - `parseEvent`/`parseToken` extraem `event` e `data.token` da resposta da TV
   (retornam `null` para token ausente/nulo/vazio ou JSON inválido).
 - As chaves do JSON são emitidas em ordem de inserção determinística para manter a

@@ -53,6 +53,9 @@ PKG = ROOT / "app" / "src" / "main" / "java" / "com" / "factory" / "samsungremot
 SESSION_DIR = PKG / "network" / "session"
 REMOTE_SESSION_KT = SESSION_DIR / "RemoteSession.kt"
 CONNECTION_STATE_KT = SESSION_DIR / "ConnectionState.kt"
+# RemoteSession implements CommandTransport, so its source must be compiled too
+# (ADR-0010 added overrides for launchApp/sendText on this seam).
+COMMAND_TRANSPORT_KT = SESSION_DIR / "CommandTransport.kt"
 
 PROTO_DIR = PKG / "network" / "protocol"
 TIZEN_PROTOCOL_KT = PROTO_DIR / "TizenProtocol.kt"
@@ -62,7 +65,7 @@ REMOTE_KEY_KT = PKG / "data" / "registry" / "RemoteKey.kt"
 DISCOVERED_TV_KT = PKG / "network" / "discovery" / "DiscoveredTv.kt"
 
 REAL_SOURCES = [
-    REMOTE_SESSION_KT, CONNECTION_STATE_KT,
+    REMOTE_SESSION_KT, CONNECTION_STATE_KT, COMMAND_TRANSPORT_KT,
     TIZEN_PROTOCOL_KT, TIZEN_MESSAGE_KT,
     REMOTE_KEY_KT, DISCOVERED_TV_KT,
 ]

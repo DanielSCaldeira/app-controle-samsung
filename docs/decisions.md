@@ -196,3 +196,48 @@ atual; migrar para `NavHost` se o grafo crescer.
 serialização de argumentos e rotas para um fluxo de três telas. *Estado em um ViewModel
 de escopo de activity* — descartado por ser menos explícito que o `Screen` selado e por
 acoplar navegação a um ViewModel compartilhado.
+
+## ADR-0010 — Lançar apps e enviar texto via REST (`/api/v2/`) em Tizen 2020+
+
+**Status:** Accepted · 2026-06-02
+
+**Contexto.** Bug reportado em campo (TV Samsung 2020+): as teclas do controle
+(D-pad, volume, power, mídia) funcionam, mas os **botões de apps de streaming não
+abrem** os apps e a **busca por texto não digita** na TV. Diagnóstico: o formato dos
+frames está correto e idêntico à biblioteca de referência (`samsung-tv-ws-api`), mas
+o firmware Tizen 2020+ **honra `SendRemoteKey` e ignora silenciosamente
+`ed.apps.launch` e `SendInputString`** pelo WebSocket de controle. Como o transporte
+é o mesmo para todos os frames (ADR-0003), o sintoma é exatamente "teclas sim, app e
+texto não".
+
+**Decisão.** Manter o WebSocket para teclas, mas rotear **launch de app e entrada de
+texto pelo plano REST** da TV (`http://<ip>:8001/api/v2/`, o mesmo host/porta já
+usado por `RestTvCandidateValidator` na descoberta):
+
+- `launchApp(appId)` → `POST /api/v2/applications/{appId}` (alta confiança; método
+  documentado e usado por integrações maduras).
+- `sendText(text)` → `POST /api/v2/remoteControl/imeInput/{base64}?token={token}`
+  (best-effort; entrada de texto é limitada por firmware em sets recentes).
+
+Implementado no próprio `RemoteSession` (OkHttp inline, reaproveitando via DI o client
+LAN de timeout curto da descoberta — `@DiscoveryHttpClient`). `RemoteSession` lembra
+`host`/`token` do alvo de `connect()` e sobrescreve `launchApp`/`sendText` do
+`CommandTransport` — que agora recebe o **frame WebSocket de fallback pronto** (construído
+por `CommandRepository` via `TizenProtocol`), mantendo a costura livre do protocolo:
+tenta REST e **cai de volta para o frame WebSocket** se o REST falhar ou o host/cliente
+for desconhecido. O REST é independente do socket de controle, então um launch funciona
+mesmo durante reconexão.
+
+**Consequências.** (+) Apps voltam a abrir em TVs 2020+; texto passa a ter um caminho
+que funciona em parte dos sets. (+) Fallback preserva o comportamento antigo para
+firmware mais velho e para os fakes de teste (o default do `CommandTransport` continua
+emitindo os frames WebSocket). (+) Cobertura JVM: `RemoteSessionRestRoutingTest` valida,
+via MockWebServer, que launch/texto batem nos endpoints REST corretos pelo caminho real
+(`CommandRepository` → `RemoteSession`). (−) A
+entrada de texto continua dependente de firmware — não há método programático 100%
+confiável em Tizen 2020+; o usuário pode precisar usar o teclado on-screen via D-pad.
+(−) Mais uma porta/plano de rede a manter (8001 HTTP além do 8002 WSS).
+
+**Alternativas.** *Manter só o WebSocket* — descartado: é a causa do bug. *Codificar o
+texto char-a-char via teclas* — frágil e lento, sem garantia de foco. *Remover o campo
+de texto* — pioraria a UX sem necessidade, já que o REST IME funciona em parte dos sets.

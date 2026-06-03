@@ -6,9 +6,11 @@ import com.factory.samsungremote.network.protocol.TizenCommand
 import com.factory.samsungremote.network.protocol.TizenEvent
 import com.factory.samsungremote.network.protocol.TizenProtocol
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -18,10 +20,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import okhttp3.HttpUrl
+import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import java.io.IOException
 import java.nio.charset.StandardCharsets
 import java.util.Base64
 import java.util.concurrent.atomic.AtomicReference
@@ -54,6 +60,14 @@ import javax.inject.Singleton
  * @param scope                  Long-lived scope the connection loop runs in
  *                               (application-scoped in production; the test scope
  *                               under unit tests so virtual time drives backoff).
+ * @param restHttpClient         Plain-HTTP client used to reach the TV's REST
+ *                               control plane (`http://<ip>:8001/api/v2/`) to launch
+ *                               apps and send text on 2020+ firmware that ignores
+ *                               those over the WebSocket (ADR-0010); `null` falls
+ *                               back to the WebSocket frames (the default for unit
+ *                               tests).
+ * @param restPort               Port of the REST control plane; Samsung's `8001`.
+ * @param restScheme             Scheme of the REST control plane; `http`.
  * @param appName                Controller name, Base64-encoded into the `name`
  *                               query parameter.
  * @param port                   Control WebSocket port; Samsung's secure default
@@ -69,6 +83,9 @@ import javax.inject.Singleton
 class RemoteSession @Inject constructor(
     private val socketFactory: WebSocket.Factory,
     private val scope: CoroutineScope,
+    private val restHttpClient: OkHttpClient? = null,
+    private val restPort: Int = DEFAULT_REST_PORT,
+    private val restScheme: String = DEFAULT_REST_SCHEME,
     private val appName: String = DEFAULT_APP_NAME,
     private val port: Int = DEFAULT_CONTROL_PORT,
     private val scheme: String = DEFAULT_SCHEME,
@@ -93,6 +110,18 @@ class RemoteSession @Inject constructor(
     /** The currently open socket, if any; used by [send] and for teardown. */
     private val currentSocket = AtomicReference<WebSocket?>(null)
 
+    /**
+     * Host and pairing token of the current [connect] target, captured so the REST
+     * control plane ([launchApp]/[sendText]) can reach the TV independently of the
+     * WebSocket. Cleared on [disconnect]. `null` host means no target is selected,
+     * in which case launch/text fall back to the WebSocket frame.
+     */
+    @Volatile
+    private var connectedHost: String? = null
+
+    @Volatile
+    private var connectedToken: String? = null
+
     /** The running connection-maintenance coroutine, if any. */
     private var connectionJob: kotlinx.coroutines.Job? = null
 
@@ -106,6 +135,8 @@ class RemoteSession @Inject constructor(
      */
     fun connect(tv: DiscoveredTv, token: String?) {
         val target = Target(host = tv.ipAddress, token = token)
+        connectedHost = target.host
+        connectedToken = target.token
         scope.launch {
             controlMutex.withLock {
                 connectionJob?.cancelAndJoin()
@@ -125,6 +156,8 @@ class RemoteSession @Inject constructor(
                 connectionJob?.cancelAndJoin()
                 connectionJob = null
                 currentSocket.getAndSet(null)?.cancel()
+                connectedHost = null
+                connectedToken = null
                 _state.value = ConnectionState.Disconnected
             }
         }
@@ -137,11 +170,95 @@ class RemoteSession @Inject constructor(
     fun sendKey(keyCode: String, command: TizenCommand = TizenCommand.CLICK): Boolean =
         send(TizenProtocol.sendKey(keyCode, command))
 
-    /** Launches a Tizen app by id (e.g. Netflix `11101200001`). */
-    fun launchApp(appId: String): Boolean = send(TizenProtocol.launchApp(appId))
+    /**
+     * Launches a Tizen app by id (e.g. Netflix `11101200001`).
+     *
+     * Prefers the REST endpoint (`POST /api/v2/applications/{appId}`), which 2020+
+     * Tizen firmware honors when the legacy `ed.apps.launch` WebSocket emit is
+     * silently dropped (ADR-0010). The REST call runs on [scope]; if it fails (or
+     * no [restHttpClient]/host is available) it falls back to [fallbackFrame] over
+     * the WebSocket.
+     *
+     * @return `true` when a launch attempt was dispatched (REST scheduled, or the
+     *         WebSocket emit reached an open socket).
+     */
+    override fun launchApp(appId: String, fallbackFrame: String): Boolean {
+        val url = restUrl("applications", appId) ?: return send(fallbackFrame)
+        scope.launch { if (!restPost(url)) send(fallbackFrame) }
+        return true
+    }
 
-    /** Types [text] into the focused field on the TV. */
-    fun sendText(text: String): Boolean = send(TizenProtocol.sendText(text))
+    /**
+     * Types [text] into the focused field on the TV.
+     *
+     * Prefers the REST IME endpoint (`POST /api/v2/remoteControl/imeInput/{base64}`,
+     * best-effort on recent firmware), falling back to [fallbackFrame] (the legacy
+     * `SendInputString` WebSocket frame) when REST fails or no [restHttpClient]/host
+     * is available (ADR-0010).
+     *
+     * @return `true` when a text attempt was dispatched.
+     */
+    override fun sendText(text: String, fallbackFrame: String): Boolean {
+        val encoded = Base64.getEncoder()
+            .encodeToString(text.toByteArray(StandardCharsets.UTF_8))
+        // Percent-encode the Base64 alt/padding chars into a single path segment,
+        // matching the reference Tizen clients (`+`→`%2B`, `/`→`%2F`, `=`→`%3D`).
+        val quoted = encoded
+            .replace("+", "%2B")
+            .replace("/", "%2F")
+            .replace("=", "%3D")
+        val token = connectedToken
+        val url = restUrl("remoteControl", "imeInput", encodedSegment = quoted) {
+            if (!token.isNullOrEmpty()) addQueryParameter("token", token)
+        } ?: return send(fallbackFrame)
+        scope.launch { if (!restPost(url)) send(fallbackFrame) }
+        return true
+    }
+
+    /**
+     * Builds `http://<host>:<restPort>/api/v2/<segments…>` for the current
+     * [connectedHost], or `null` when REST is unavailable (no [restHttpClient] or
+     * no connected host) so the caller falls back to the WebSocket frame.
+     *
+     * [encodedSegment] is appended already-percent-encoded (used for the Base64 IME
+     * payload); [extra] can append query parameters (e.g. the pairing token).
+     */
+    private fun restUrl(
+        vararg segments: String,
+        encodedSegment: String? = null,
+        extra: HttpUrl.Builder.() -> Unit = {},
+    ): HttpUrl? {
+        if (restHttpClient == null) return null
+        val host = connectedHost ?: return null
+        val builder = HttpUrl.Builder()
+            .scheme(restScheme)
+            .host(host)
+            .port(restPort)
+            .addPathSegment("api")
+            .addPathSegment("v2")
+        segments.forEach(builder::addPathSegment)
+        if (encodedSegment != null) builder.addEncodedPathSegment(encodedSegment)
+        builder.extra()
+        return builder.build()
+    }
+
+    /**
+     * Issues an empty-body POST to [url] on the REST plane. Returns `true` on a 2xx
+     * response, `false` on any HTTP error or I/O failure (so the caller can fall
+     * back to the WebSocket frame). Runs the blocking call on [Dispatchers.IO].
+     */
+    private suspend fun restPost(url: HttpUrl): Boolean = withContext(Dispatchers.IO) {
+        val client = restHttpClient ?: return@withContext false
+        val request = Request.Builder()
+            .url(url)
+            .post(ByteArray(0).toRequestBody(null))
+            .build()
+        try {
+            client.newCall(request).execute().use { it.isSuccessful }
+        } catch (_: IOException) {
+            false
+        }
+    }
 
     /**
      * Writes [frame] to the open socket. Returns `false` when no socket is
@@ -304,6 +421,10 @@ class RemoteSession @Inject constructor(
         const val DEFAULT_APP_NAME = "SamsungRemote"
         const val DEFAULT_CONTROL_PORT = 8002
         const val DEFAULT_SCHEME = "wss"
+
+        /** Samsung's plain-HTTP REST control plane (ADR-0010). */
+        const val DEFAULT_REST_PORT = 8001
+        const val DEFAULT_REST_SCHEME = "http"
 
         const val DEFAULT_INITIAL_BACKOFF_MILLIS = 500L
         const val DEFAULT_MAX_BACKOFF_MILLIS = 5_000L
