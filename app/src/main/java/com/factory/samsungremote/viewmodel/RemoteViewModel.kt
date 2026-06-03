@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.factory.samsungremote.data.registry.KeyCategory
 import com.factory.samsungremote.data.registry.RemoteKey
 import com.factory.samsungremote.data.favorites.FavoriteAppsStore
+import com.factory.samsungremote.data.registry.KnownApps
 import com.factory.samsungremote.data.repository.CommandRepository
 import com.factory.samsungremote.network.discovery.DiscoveredTv
 import com.factory.samsungremote.network.protocol.InstalledApp
@@ -12,7 +13,9 @@ import com.factory.samsungremote.network.session.ConnectionState
 import com.factory.samsungremote.network.session.RemoteSession
 import com.factory.samsungremote.network.wol.WakeOnLan
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -36,6 +39,29 @@ sealed interface RemoteIntent {
 
     /** Launch the Tizen app identified by [appId] (e.g. Netflix `11101200001`). */
     data class LaunchApp(val appId: String) : RemoteIntent
+}
+
+/**
+ * State of the one-tap "initial setup" that probes which known apps are installed
+ * on the connected TV and which id launches each (ADR-0011).
+ */
+sealed interface SetupState {
+    /** Not started yet. */
+    data object Idle : SetupState
+
+    /** Probing in progress: [done] of [total] apps checked. */
+    data class Running(val done: Int, val total: Int) : SetupState
+
+    /**
+     * Finished: [detected] apps (with the id that exists on this TV), [notFound]
+     * app names whose candidate ids all returned 404, and the TV [model] (for the
+     * not-found report).
+     */
+    data class Done(
+        val detected: List<InstalledApp>,
+        val notFound: List<String>,
+        val model: String?,
+    ) : SetupState
 }
 
 /**
@@ -116,6 +142,55 @@ class RemoteViewModel @Inject constructor(
     /** Asks the TV again for its installed-app list (manual refresh). */
     fun refreshApps() {
         session.refreshInstalledApps()
+    }
+
+    private val _setupState = MutableStateFlow<SetupState>(SetupState.Idle)
+
+    /**
+     * Progress/result of [runSetup] — the initial app-detection probe the screen
+     * renders (button → progress → detected apps + not-found report).
+     */
+    val setupState: StateFlow<SetupState> = _setupState.asStateFlow()
+
+    /**
+     * Detects which [KnownApps] are installed on the connected TV by probing each
+     * candidate id over REST ([RemoteSession.isAppInstalled]) and keeping the first
+     * that exists, so app ids are correct per model (ADR-0011). Apps whose
+     * candidates all fail are reported as not-found (logged with the TV model so
+     * missing ids can be added). Re-runnable; ignored while already running.
+     */
+    fun runSetup() {
+        if (_setupState.value is SetupState.Running) return
+        viewModelScope.launch {
+            val apps = KnownApps.list
+            _setupState.value = SetupState.Running(done = 0, total = apps.size)
+            val model = session.fetchModel()
+            val detected = mutableListOf<InstalledApp>()
+            val notFound = mutableListOf<String>()
+            apps.forEachIndexed { index, app ->
+                var foundId: String? = null
+                for (candidate in app.candidateIds) {
+                    if (session.isAppInstalled(candidate)) {
+                        foundId = candidate
+                        break
+                    }
+                }
+                if (foundId != null) {
+                    detected.add(InstalledApp(appId = foundId, name = app.name))
+                } else {
+                    notFound.add(app.name)
+                }
+                _setupState.value = SetupState.Running(done = index + 1, total = apps.size)
+            }
+            if (notFound.isNotEmpty()) {
+                android.util.Log.w(
+                    "SamsungRemote",
+                    "Apps não encontrados na TV ${model ?: "desconhecida"}: " +
+                        notFound.joinToString(),
+                )
+            }
+            _setupState.value = SetupState.Done(detected = detected, notFound = notFound, model = model)
+        }
     }
 
     /**

@@ -28,6 +28,7 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import org.json.JSONObject
 import java.io.IOException
 import java.nio.charset.StandardCharsets
 import java.util.Base64
@@ -194,6 +195,38 @@ class RemoteSession @Inject constructor(
     fun refreshInstalledApps(): Boolean = send(TizenProtocol.requestInstalledApps())
 
     /**
+     * Checks whether the app [appId] is installed on the connected TV, via
+     * `GET /api/v2/applications/{appId}` — a 2xx means it exists, 404 means it does
+     * not. Used by the initial-setup probe to find which candidate id launches each
+     * app on this model (ADR-0011). Returns `false` when offline or on any error.
+     */
+    suspend fun isAppInstalled(appId: String): Boolean {
+        if (appId.isEmpty()) return false
+        val url = restUrl("applications", appId) ?: return false
+        return restGet(url)
+    }
+
+    /**
+     * Fetches the TV's model name from the device-info endpoint (`GET /api/v2/`),
+     * used when reporting apps not found on a given model. `null` on any failure.
+     */
+    suspend fun fetchModel(): String? {
+        val client = restHttpClient ?: return null
+        val host = connectedHost ?: return null
+        val url = HttpUrl.Builder()
+            .scheme(restScheme).host(host).port(restPort)
+            .addPathSegment("api").addPathSegment("v2").addPathSegment("")
+            .build()
+        val body = restGetBody(client, url) ?: return null
+        return try {
+            JSONObject(body).optJSONObject("device")
+                ?.optString("modelName")?.takeIf { it.isNotEmpty() }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /**
      * Launches a Tizen app by id (e.g. Netflix `11101200001`).
      *
      * Prefers the REST endpoint (`POST /api/v2/applications/{appId}`), which 2020+
@@ -282,6 +315,30 @@ class RemoteSession @Inject constructor(
             false
         }
     }
+
+    /** GETs [url]; `true` on a 2xx response, `false` on error/failure. */
+    private suspend fun restGet(url: HttpUrl): Boolean = withContext(Dispatchers.IO) {
+        val client = restHttpClient ?: return@withContext false
+        val request = Request.Builder().url(url).get().build()
+        try {
+            client.newCall(request).execute().use { it.isSuccessful }
+        } catch (_: IOException) {
+            false
+        }
+    }
+
+    /** GETs [url] and returns the body text, or `null` on non-2xx / failure. */
+    private suspend fun restGetBody(client: OkHttpClient, url: HttpUrl): String? =
+        withContext(Dispatchers.IO) {
+            val request = Request.Builder().url(url).get().build()
+            try {
+                client.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) response.body?.string() else null
+                }
+            } catch (_: IOException) {
+                null
+            }
+        }
 
     /**
      * Writes [frame] to the open socket. Returns `false` when no socket is

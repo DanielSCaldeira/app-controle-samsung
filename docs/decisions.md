@@ -267,6 +267,17 @@ e a lista é exposta como `RemoteSession.installedApps: StateFlow<List<Installed
   formando a seção **"Meus apps"**. A escolha é persistida por `FavoriteAppsStore`
   (SharedPreferences via `KeyValueStore`, serializada em JSON) e sobrevive a reinícios.
 
+**Fallback de detecção por sondagem REST (`ed.installedApp.get` desativado em 2020+).**
+Em firmwares recentes (validado na QN70Q65DAGXZD/2024) a TV **não responde** ao
+`ed.installedApp.get` — a descoberta por WebSocket volta vazia. Como o endpoint de
+status REST responde (`GET /api/v2/applications/{id}` → 2xx instalado, 404 não), uma
+**configuração inicial** (`RemoteViewModel.runSetup`) sonda, para cada app de
+`KnownApps`, seus `candidateIds` (`RemoteSession.isAppInstalled`) e fica com o primeiro
+que existe — detectando apps instalados e o id correto por modelo, sem abrir nada. Apps
+cujos candidatos todos falham são reportados como **não encontrados** junto do
+`modelName` da TV (`RemoteSession.fetchModel`, logado) para alimentar a lista de ids.
+Sem detecção, a UI usa o catálogo curado `PopularApps`.
+
 **Consequências.** (+) O remoto se adapta a qualquer TV Samsung sem catálogo fixo; os
 botões curados deixam de quebrar por ID errado. (+) Reaproveita o socket de controle —
 sem nova conexão. (+) Degrada bem: sem resposta, os Favoritos usam o id de reserva e a

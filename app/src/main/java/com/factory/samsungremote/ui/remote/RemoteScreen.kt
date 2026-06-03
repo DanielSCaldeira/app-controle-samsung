@@ -38,6 +38,7 @@ import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Remove
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.material.icons.rounded.Stop
@@ -91,6 +92,7 @@ import com.factory.samsungremote.network.protocol.InstalledApp
 import com.factory.samsungremote.network.session.ConnectionState
 import com.factory.samsungremote.viewmodel.RemoteIntent
 import com.factory.samsungremote.viewmodel.RemoteViewModel
+import com.factory.samsungremote.viewmodel.SetupState
 
 /** Stable test tags for the remote-control UI, shared with Compose UI tests. */
 object RemoteTestTags {
@@ -247,6 +249,7 @@ fun RemoteRoute(
     val connectionState by viewModel.connectionState.collectAsState()
     val installedApps by viewModel.installedApps.collectAsState()
     val favoriteApps by viewModel.favoriteApps.collectAsState()
+    val setupState by viewModel.setupState.collectAsState()
     RemoteScreen(
         onIntent = { viewModel.onIntent(it) },
         tvName = tv.name,
@@ -255,6 +258,8 @@ fun RemoteRoute(
         favoriteApps = favoriteApps,
         onToggleFavorite = { viewModel.toggleFavorite(it) },
         onRefreshApps = { viewModel.refreshApps() },
+        appSetup = setupState,
+        onRunSetup = { viewModel.runSetup() },
         modifier = modifier,
     )
 }
@@ -296,6 +301,8 @@ fun RemoteScreen(
     favoriteApps: List<InstalledApp> = emptyList(),
     onToggleFavorite: (InstalledApp) -> Unit = {},
     onRefreshApps: () -> Unit = {},
+    appSetup: SetupState = SetupState.Idle,
+    onRunSetup: () -> Unit = {},
 ) {
     val press: (RemoteKey) -> Unit = { onIntent(RemoteIntent.PressKey(it)) }
     val type: (String) -> Unit = { text -> onIntent(RemoteIntent.TypeText(text)) }
@@ -367,15 +374,30 @@ fun RemoteScreen(
                     )
                 }
             }
-            // App pick-list to launch and pin (ADR-0010/0011): the apps the TV
-            // reported when discovery works, otherwise a curated popular-apps list
-            // (some 2020+ firmwares don't answer the discovery request). Either way
-            // the user can star apps into "Meus apps".
+            // App pick-list to launch and pin (ADR-0010/0011). Precedence: apps the
+            // TV pushed via discovery (works on some TVs); else the apps detected by
+            // the initial-setup probe (correct ids for this model); else the curated
+            // popular list. The user stars any of them into "Meus apps".
+            val detectedApps = (appSetup as? SetupState.Done)?.detected.orEmpty()
             val discovered = installedApps.isNotEmpty()
-            val pickList = if (discovered) installedApps else PopularApps.list
-            SectionCard(title = if (discovered) "Todos os apps da TV" else "Apps populares") {
+            val pickList = when {
+                discovered -> installedApps
+                detectedApps.isNotEmpty() -> detectedApps
+                else -> PopularApps.list
+            }
+            val pickTitle = when {
+                discovered -> "Todos os apps da TV"
+                detectedApps.isNotEmpty() -> "Apps da sua TV"
+                else -> "Apps populares"
+            }
+            SectionCard(title = pickTitle) {
                 if (!discovered) {
-                    AppsHint(connectionState = connectionState, onRefresh = onRefreshApps)
+                    AppSetupBar(
+                        setup = appSetup,
+                        connectionState = connectionState,
+                        onRunSetup = onRunSetup,
+                        onRefresh = onRefreshApps,
+                    )
                 }
                 InstalledAppGrid(
                     apps = pickList,
@@ -917,13 +939,16 @@ private fun InstalledAppGrid(
 }
 
 /**
- * Hint shown above the curated "Apps populares" pick-list when the TV did not
- * return its installed-app list (ADR-0011): explains why and offers a manual
- * "Atualizar" that re-requests discovery (works on TVs that support it).
+ * Setup bar above the app pick-list when the TV doesn't push its list (ADR-0011).
+ * Drives the one-tap detection probe: a button when idle, progress while running,
+ * and a summary (+ not-found report with the TV model) when done. Falls back to a
+ * connect hint when offline.
  */
 @Composable
-private fun AppsHint(
+private fun AppSetupBar(
+    setup: SetupState,
     connectionState: ConnectionState?,
+    onRunSetup: () -> Unit,
     onRefresh: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -931,26 +956,75 @@ private fun AppsHint(
     Column(
         modifier = modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Text(
-            text = if (connected) {
-                "Sua TV não enviou a lista de apps. Escolha abaixo e fixe com a ⭐, " +
-                    "ou toque em Atualizar para tentar de novo."
-            } else {
-                "Conecte à TV para abrir/fixar apps. Enquanto isso, escolha abaixo."
-            },
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            fontSize = 13.sp,
-            textAlign = TextAlign.Center,
-        )
-        TextButton(
-            onClick = onRefresh,
-            modifier = Modifier.testTag("remote_apps_refresh"),
-        ) {
-            Icon(Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(6.dp))
-            Text("Atualizar")
+        when (setup) {
+            is SetupState.Running -> Text(
+                text = "Detectando apps na sua TV… ${setup.done}/${setup.total}",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 13.sp,
+                textAlign = TextAlign.Center,
+            )
+
+            is SetupState.Done -> {
+                Text(
+                    text = "✓ ${setup.detected.size} apps encontrados na sua TV.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 13.sp,
+                    textAlign = TextAlign.Center,
+                )
+                if (setup.notFound.isNotEmpty()) {
+                    Text(
+                        text = "Não encontrados${setup.model?.let { " ($it)" } ?: ""}: " +
+                            "${setup.notFound.joinToString()}. Avisarei o desenvolvedor " +
+                            "para adicionar esses apps.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+                TextButton(
+                    onClick = onRunSetup,
+                    modifier = Modifier.testTag("remote_apps_setup"),
+                ) {
+                    Icon(Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Detectar de novo")
+                }
+            }
+
+            SetupState.Idle -> {
+                Text(
+                    text = if (connected) {
+                        "Sua TV não envia a lista de apps. Toque para detectar quais " +
+                            "estão instalados — ou escolha abaixo e fixe com a ⭐."
+                    } else {
+                        "Conecte à TV para detectar/fixar apps. Enquanto isso, escolha abaixo."
+                    },
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 13.sp,
+                    textAlign = TextAlign.Center,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(
+                        onClick = onRunSetup,
+                        enabled = connected,
+                        modifier = Modifier.testTag("remote_apps_setup"),
+                    ) {
+                        Icon(Icons.Rounded.Search, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Detectar apps da TV")
+                    }
+                    TextButton(
+                        onClick = onRefresh,
+                        modifier = Modifier.testTag("remote_apps_refresh"),
+                    ) {
+                        Icon(Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Atualizar")
+                    }
+                }
+            }
         }
     }
 }
