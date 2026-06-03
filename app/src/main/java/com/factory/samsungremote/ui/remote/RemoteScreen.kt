@@ -381,6 +381,7 @@ fun RemoteScreen(
                     onLaunch = launchById,
                     onToggleFavorite = onToggleFavorite,
                     tagPrefix = "remote_installed_",
+                    hideStarForFavorites = true,
                 )
             }
             Spacer(Modifier.height(8.dp))
@@ -837,6 +838,7 @@ private fun InstalledAppGrid(
     onToggleFavorite: (InstalledApp) -> Unit,
     modifier: Modifier = Modifier,
     tagPrefix: String = "remote_installed_",
+    hideStarForFavorites: Boolean = false,
 ) {
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -845,9 +847,14 @@ private fun InstalledAppGrid(
         apps.chunked(2).forEach { rowApps ->
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 rowApps.forEach { app ->
+                    val isFavorite = app.appId in favoriteIds
                     DiscoveredAppTile(
                         app = app,
-                        isFavorite = app.appId in favoriteIds,
+                        isFavorite = isFavorite,
+                        // In the pick-list, hide the star once an app is a favorite so
+                        // a mis-tap while launching can't accidentally unpin it; the
+                        // user removes favorites from the "Favoritos" section instead.
+                        showStar = !(isFavorite && hideStarForFavorites),
                         onLaunch = { onLaunch(app.appId) },
                         onToggleFavorite = { onToggleFavorite(app) },
                         tag = "$tagPrefix${app.appId}",
@@ -956,6 +963,10 @@ private fun AppSetupBar(
  * A discovered-app tile: brand-colored badge + name (tap to launch) plus a star
  * toggle to pin/unpin the app to the home screen. The whole surface launches; the
  * star is a separate hit target so the two actions don't collide.
+ *
+ * [showStar] lets the caller hide the star entirely — used in the pick-list for
+ * apps already favorited, so a mis-tap while launching can't accidentally unpin
+ * them (removal is done from the "Favoritos" section).
  */
 @Composable
 private fun DiscoveredAppTile(
@@ -965,6 +976,7 @@ private fun DiscoveredAppTile(
     onToggleFavorite: () -> Unit,
     tag: String,
     modifier: Modifier = Modifier,
+    showStar: Boolean = true,
 ) {
     val launchDescription = stringResource(R.string.remote_cd_app_launch, app.name)
     Surface(
@@ -978,7 +990,12 @@ private fun DiscoveredAppTile(
             .semantics { contentDescription = launchDescription },
     ) {
         Row(
-            modifier = Modifier.padding(start = 14.dp, top = 6.dp, bottom = 6.dp, end = 4.dp),
+            modifier = Modifier.padding(
+                start = 14.dp,
+                top = 6.dp,
+                bottom = 6.dp,
+                end = if (showStar) 4.dp else 14.dp,
+            ),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
@@ -1003,26 +1020,28 @@ private fun DiscoveredAppTile(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
-            val pinDescription = stringResource(
-                if (isFavorite) R.string.remote_cd_app_unpin else R.string.remote_cd_app_pin,
-                app.name,
-            )
-            IconButton(
-                onClick = onToggleFavorite,
-                modifier = Modifier
-                    .size(40.dp)
-                    .testTag("${tag}_star")
-                    .semantics { contentDescription = pinDescription },
-            ) {
-                Icon(
-                    imageVector = if (isFavorite) Icons.Rounded.Star else Icons.Rounded.StarBorder,
-                    contentDescription = null,
-                    tint = if (isFavorite) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
+            if (showStar) {
+                val pinDescription = stringResource(
+                    if (isFavorite) R.string.remote_cd_app_unpin else R.string.remote_cd_app_pin,
+                    app.name,
                 )
+                IconButton(
+                    onClick = onToggleFavorite,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .testTag("${tag}_star")
+                        .semantics { contentDescription = pinDescription },
+                ) {
+                    Icon(
+                        imageVector = if (isFavorite) Icons.Rounded.Star else Icons.Rounded.StarBorder,
+                        contentDescription = null,
+                        tint = if (isFavorite) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
             }
         }
     }
