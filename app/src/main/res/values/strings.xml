@@ -77,4 +77,7 @@
     <string name="remote_cd_text_send">Send text to TV</string>
     <string name="remote_cd_digit">Digit %1$d</string>
     <string name="remote_cd_app_launch">Launch %1$s</string>
+    <string name="remote_cd_app_pin">Pin %1$s to home</string>
+    <string name="remote_cd_app_unpin">Unpin %1$s from home</string>
+    <string name="remote_cd_keypad_toggle">Show keypad and text entry</string>
 </resources>

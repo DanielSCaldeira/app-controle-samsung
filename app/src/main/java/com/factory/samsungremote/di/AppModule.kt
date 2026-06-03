@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.room.Room
 import com.factory.samsungremote.data.crypto.KeystoreTokenCipher
 import com.factory.samsungremote.data.crypto.TokenCipher
+import com.factory.samsungremote.data.favorites.KeyValueStore
+import com.factory.samsungremote.data.favorites.SharedPrefsKeyValueStore
 import com.factory.samsungremote.data.db.AppDatabase
 import com.factory.samsungremote.data.db.AppDatabaseMigrations
 import com.factory.samsungremote.data.db.KnownTvDao
@@ -51,4 +53,18 @@ object AppModule {
     @Provides
     @Singleton
     fun provideTokenCipher(): TokenCipher = KeystoreTokenCipher()
+
+    /**
+     * Persistence seam for the user's pinned home-screen apps (ADR-0011), backed
+     * by a private [android.content.SharedPreferences] file.
+     */
+    @Provides
+    @Singleton
+    fun provideKeyValueStore(
+        @ApplicationContext context: Context,
+    ): KeyValueStore = SharedPrefsKeyValueStore(
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE),
+    )
+
+    private const val PREFS_NAME = "samsung_remote_prefs"
 }

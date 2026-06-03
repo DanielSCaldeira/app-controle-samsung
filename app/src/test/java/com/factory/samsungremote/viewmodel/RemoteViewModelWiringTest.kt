@@ -1,5 +1,7 @@
 package com.factory.samsungremote.viewmodel
 
+import com.factory.samsungremote.data.favorites.FavoriteAppsStore
+import com.factory.samsungremote.data.favorites.KeyValueStore
 import com.factory.samsungremote.data.registry.RemoteKeyCatalog
 import com.factory.samsungremote.data.repository.CommandRepository
 import com.factory.samsungremote.network.discovery.DiscoveredTv
@@ -86,7 +88,15 @@ class RemoteViewModelWiringTest {
         val factory = WebSocket.Factory { _: Request, _: WebSocketListener -> socket }
         val session = RemoteSession(socketFactory = factory, scope = scope)
         val repository = CommandRepository(session)
-        return RemoteViewModel(repository, session, WakeOnLan())
+        val favorites = FavoriteAppsStore(InMemoryKeyValueStore())
+        return RemoteViewModel(repository, session, WakeOnLan(), favorites)
+    }
+
+    /** Map-backed [KeyValueStore] so the favorites store needs no Android prefs. */
+    private class InMemoryKeyValueStore : KeyValueStore {
+        private val map = mutableMapOf<String, String>()
+        override fun getString(key: String): String? = map[key]
+        override fun putString(key: String, value: String) { map[key] = value }
     }
 
     /**

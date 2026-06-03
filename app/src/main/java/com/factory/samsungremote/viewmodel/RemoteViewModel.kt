@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.factory.samsungremote.data.registry.KeyCategory
 import com.factory.samsungremote.data.registry.RemoteKey
+import com.factory.samsungremote.data.favorites.FavoriteAppsStore
 import com.factory.samsungremote.data.repository.CommandRepository
 import com.factory.samsungremote.network.discovery.DiscoveredTv
 import com.factory.samsungremote.network.protocol.InstalledApp
@@ -73,6 +74,7 @@ class RemoteViewModel @Inject constructor(
     private val commandRepository: CommandRepository,
     private val session: RemoteSession,
     private val wakeOnLan: WakeOnLan,
+    private val favoriteAppsStore: FavoriteAppsStore,
 ) : ViewModel() {
 
     /**
@@ -100,6 +102,16 @@ class RemoteViewModel @Inject constructor(
      * instead of relying on hard-coded ids.
      */
     val installedApps: StateFlow<List<InstalledApp>> = session.installedApps
+
+    /**
+     * Apps the user pinned to the home screen (ADR-0011), persisted across
+     * restarts. The screen renders these under "Meus apps" and offers a pin/unpin
+     * toggle on the full app list.
+     */
+    val favoriteApps: StateFlow<List<InstalledApp>> = favoriteAppsStore.favorites
+
+    /** Pins [app] to the home screen, or unpins it if already pinned. */
+    fun toggleFavorite(app: InstalledApp) = favoriteAppsStore.toggle(app)
 
     /**
      * Routes a touch-derived [intent] to the matching domain action.

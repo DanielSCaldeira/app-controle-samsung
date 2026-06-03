@@ -37,12 +37,15 @@ import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.PowerSettingsNew
 import androidx.compose.material.icons.rounded.Remove
+import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.VolumeDown
 import androidx.compose.material.icons.rounded.VolumeOff
 import androidx.compose.material.icons.rounded.VolumeUp
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -239,11 +242,14 @@ fun RemoteRoute(
 
     val connectionState by viewModel.connectionState.collectAsState()
     val installedApps by viewModel.installedApps.collectAsState()
+    val favoriteApps by viewModel.favoriteApps.collectAsState()
     RemoteScreen(
         onIntent = { viewModel.onIntent(it) },
         tvName = tv.name,
         connectionState = connectionState,
         installedApps = installedApps,
+        favoriteApps = favoriteApps,
+        onToggleFavorite = { viewModel.toggleFavorite(it) },
         modifier = modifier,
     )
 }
@@ -268,6 +274,10 @@ fun RemoteRoute(
  * @param installedApps   Apps discovered on the connected TV (ADR-0010). Used to
  *                        resolve the curated shortcuts' real app ids and to render
  *                        the "all apps" list; empty until discovery completes.
+ * @param favoriteApps    Apps the user pinned to the home screen ("Meus apps",
+ *                        ADR-0011); rendered as their own section and reflected as
+ *                        a filled star in the full list.
+ * @param onToggleFavorite Pins/unpins an app from the discovered list.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -277,6 +287,8 @@ fun RemoteScreen(
     tvName: String? = null,
     connectionState: ConnectionState? = null,
     installedApps: List<InstalledApp> = emptyList(),
+    favoriteApps: List<InstalledApp> = emptyList(),
+    onToggleFavorite: (InstalledApp) -> Unit = {},
 ) {
     val press: (RemoteKey) -> Unit = { onIntent(RemoteIntent.PressKey(it)) }
     val type: (String) -> Unit = { text -> onIntent(RemoteIntent.TypeText(text)) }
@@ -335,11 +347,30 @@ fun RemoteScreen(
             VolumeChannelRow(onPress = press)
             SectionCard(title = "Media") { MediaRow(onPress = press) }
             SectionCard(title = "Favoritos") { AppGrid(onLaunch = launch) }
+            val favoriteIds = favoriteApps.mapTo(mutableSetOf()) { it.appId }
+            // Apps the user pinned from the full list (ADR-0011).
+            if (favoriteApps.isNotEmpty()) {
+                SectionCard(title = "Meus apps") {
+                    InstalledAppGrid(
+                        apps = favoriteApps,
+                        favoriteIds = favoriteIds,
+                        onLaunch = launchById,
+                        onToggleFavorite = onToggleFavorite,
+                        tagPrefix = "remote_fav_",
+                    )
+                }
+            }
             // Full list of apps the TV reports as installed (ADR-0010); appears once
-            // discovery completes so the user can open anything on this TV.
+            // discovery completes so the user can open — or pin — anything on this TV.
             if (installedApps.isNotEmpty()) {
                 SectionCard(title = "Todos os apps da TV") {
-                    InstalledAppGrid(apps = installedApps, onLaunch = launchById)
+                    InstalledAppGrid(
+                        apps = installedApps,
+                        favoriteIds = favoriteIds,
+                        onLaunch = launchById,
+                        onToggleFavorite = onToggleFavorite,
+                        tagPrefix = "remote_installed_",
+                    )
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -835,16 +866,20 @@ private fun AppGrid(
 }
 
 /**
- * The full list of apps the TV reported as installed (ADR-0010), laid out as the
- * same launcher-style 2-column grid of [AppTile]s. Each tile launches the app by
- * the id the TV itself reported, so it is always correct for that model. Known
- * brands get their accent ([accentFor]); the rest get a neutral badge.
+ * A 2-column grid of discovered apps (ADR-0010/0011). Each tile launches the app
+ * by the id the TV itself reported (always correct for that model) and carries a
+ * star toggle to pin/unpin it to the home screen. Known brands get their accent
+ * ([accentFor]); the rest get a neutral badge. [tagPrefix] keeps test tags unique
+ * between the "Meus apps" and "Todos os apps" grids.
  */
 @Composable
 private fun InstalledAppGrid(
     apps: List<InstalledApp>,
+    favoriteIds: Set<String>,
     onLaunch: (String) -> Unit,
+    onToggleFavorite: (InstalledApp) -> Unit,
     modifier: Modifier = Modifier,
+    tagPrefix: String = "remote_installed_",
 ) {
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -853,17 +888,93 @@ private fun InstalledAppGrid(
         apps.chunked(2).forEach { rowApps ->
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 rowApps.forEach { app ->
-                    AppTile(
-                        label = app.name,
-                        initial = app.name.take(1).uppercase(),
-                        accent = accentFor(app),
-                        tag = "remote_installed_${app.appId}",
-                        onClick = { onLaunch(app.appId) },
+                    DiscoveredAppTile(
+                        app = app,
+                        isFavorite = app.appId in favoriteIds,
+                        onLaunch = { onLaunch(app.appId) },
+                        onToggleFavorite = { onToggleFavorite(app) },
+                        tag = "$tagPrefix${app.appId}",
                         modifier = Modifier.weight(1f),
                     )
                 }
                 // Keep a lone trailing tile at half width, aligned with the grid.
                 if (rowApps.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+/**
+ * A discovered-app tile: brand-colored badge + name (tap to launch) plus a star
+ * toggle to pin/unpin the app to the home screen. The whole surface launches; the
+ * star is a separate hit target so the two actions don't collide.
+ */
+@Composable
+private fun DiscoveredAppTile(
+    app: InstalledApp,
+    isFavorite: Boolean,
+    onLaunch: () -> Unit,
+    onToggleFavorite: () -> Unit,
+    tag: String,
+    modifier: Modifier = Modifier,
+) {
+    val launchDescription = stringResource(R.string.remote_cd_app_launch, app.name)
+    Surface(
+        onClick = onLaunch,
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        modifier = modifier
+            .sizeIn(minHeight = 64.dp)
+            .testTag(tag)
+            .semantics { contentDescription = launchDescription },
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 14.dp, top = 6.dp, bottom = 6.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .background(accentFor(app), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = app.name.take(1).uppercase(),
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                )
+            }
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = app.name,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            val pinDescription = stringResource(
+                if (isFavorite) R.string.remote_cd_app_unpin else R.string.remote_cd_app_pin,
+                app.name,
+            )
+            IconButton(
+                onClick = onToggleFavorite,
+                modifier = Modifier
+                    .size(40.dp)
+                    .testTag("${tag}_star")
+                    .semantics { contentDescription = pinDescription },
+            ) {
+                Icon(
+                    imageVector = if (isFavorite) Icons.Rounded.Star else Icons.Rounded.StarBorder,
+                    contentDescription = null,
+                    tint = if (isFavorite) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
             }
         }
     }

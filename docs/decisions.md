@@ -262,7 +262,10 @@ e a lista é exposta como `RemoteSession.installedApps: StateFlow<List<Installed
   (match por id, depois por nome — `resolveAppId`), caindo no id fixo do catálogo como
   reserva enquanto a descoberta não chega;
 - abaixo, uma seção **"Todos os apps da TV"** lista todos os apps instalados, cada um
-  lançado pelo seu próprio `appId` (sempre correto para aquele aparelho).
+  lançado pelo seu próprio `appId` (sempre correto para aquele aparelho);
+- o usuário pode **fixar** qualquer app da lista na home (estrela em cada tile),
+  formando a seção **"Meus apps"**. A escolha é persistida por `FavoriteAppsStore`
+  (SharedPreferences via `KeyValueStore`, serializada em JSON) e sobrevive a reinícios.
 
 **Consequências.** (+) O remoto se adapta a qualquer TV Samsung sem catálogo fixo; os
 botões curados deixam de quebrar por ID errado. (+) Reaproveita o socket de controle —
