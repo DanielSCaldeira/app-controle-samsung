@@ -183,10 +183,11 @@ class RemoteViewModel @Inject constructor(
                 _setupState.value = SetupState.Running(done = index + 1, total = apps.size)
             }
             if (notFound.isNotEmpty()) {
+                // Não distinguível por 404: pode ser app ausente OU id desconhecido.
                 android.util.Log.w(
                     "SamsungRemote",
-                    "Apps não encontrados na TV ${model ?: "desconhecida"}: " +
-                        notFound.joinToString(),
+                    "Apps não detectados na TV ${model ?: "desconhecida"} " +
+                        "(não instalados ou id desconhecido): ${notFound.joinToString()}",
                 )
             }
             _setupState.value = SetupState.Done(detected = detected, notFound = notFound, model = model)

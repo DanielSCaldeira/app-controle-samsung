@@ -975,9 +975,9 @@ private fun AppSetupBar(
                 )
                 if (setup.notFound.isNotEmpty()) {
                     Text(
-                        text = "Não encontrados${setup.model?.let { " ($it)" } ?: ""}: " +
-                            "${setup.notFound.joinToString()}. Avisarei o desenvolvedor " +
-                            "para adicionar esses apps.",
+                        text = "Não detectados${setup.model?.let { " ($it)" } ?: ""}: " +
+                            "${setup.notFound.joinToString()} — podem não estar instalados " +
+                            "nesta TV, ou o ID ainda não ser conhecido.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp,
                         textAlign = TextAlign.Center,
