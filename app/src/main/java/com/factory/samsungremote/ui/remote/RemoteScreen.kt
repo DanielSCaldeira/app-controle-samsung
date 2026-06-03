@@ -36,6 +36,7 @@ import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.PowerSettingsNew
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.StarBorder
@@ -51,6 +52,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -70,6 +72,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -250,6 +253,7 @@ fun RemoteRoute(
         installedApps = installedApps,
         favoriteApps = favoriteApps,
         onToggleFavorite = { viewModel.toggleFavorite(it) },
+        onRefreshApps = { viewModel.refreshApps() },
         modifier = modifier,
     )
 }
@@ -278,6 +282,7 @@ fun RemoteRoute(
  *                        ADR-0011); rendered as their own section and reflected as
  *                        a filled star in the full list.
  * @param onToggleFavorite Pins/unpins an app from the discovered list.
+ * @param onRefreshApps   Re-requests the TV's installed-app list (manual refresh).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -289,6 +294,7 @@ fun RemoteScreen(
     installedApps: List<InstalledApp> = emptyList(),
     favoriteApps: List<InstalledApp> = emptyList(),
     onToggleFavorite: (InstalledApp) -> Unit = {},
+    onRefreshApps: () -> Unit = {},
 ) {
     val press: (RemoteKey) -> Unit = { onIntent(RemoteIntent.PressKey(it)) }
     val type: (String) -> Unit = { text -> onIntent(RemoteIntent.TypeText(text)) }
@@ -360,10 +366,13 @@ fun RemoteScreen(
                     )
                 }
             }
-            // Full list of apps the TV reports as installed (ADR-0010); appears once
-            // discovery completes so the user can open — or pin — anything on this TV.
-            if (installedApps.isNotEmpty()) {
-                SectionCard(title = "Todos os apps da TV") {
+            // Full list of apps the TV reports as installed (ADR-0010/0011). Always
+            // shown so the feature is discoverable; falls back to a hint + refresh
+            // while the list is empty (not connected yet, or the TV hasn't replied).
+            SectionCard(title = "Todos os apps da TV") {
+                if (installedApps.isEmpty()) {
+                    AppsEmptyState(connectionState = connectionState, onRefresh = onRefreshApps)
+                } else {
                     InstalledAppGrid(
                         apps = installedApps,
                         favoriteIds = favoriteIds,
@@ -900,6 +909,44 @@ private fun InstalledAppGrid(
                 // Keep a lone trailing tile at half width, aligned with the grid.
                 if (rowApps.size == 1) Spacer(Modifier.weight(1f))
             }
+        }
+    }
+}
+
+/**
+ * Placeholder shown in the "Todos os apps da TV" card while the discovered-app
+ * list is empty: a short hint (whether the TV is connected) plus a manual
+ * "Atualizar" button that re-requests the list (ADR-0011).
+ */
+@Composable
+private fun AppsEmptyState(
+    connectionState: ConnectionState?,
+    onRefresh: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val connected = connectionState is ConnectionState.Connected
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = if (connected) {
+                "Nenhum app recebido da TV ainda. Toque em Atualizar."
+            } else {
+                "Conecte à TV para listar os apps instalados."
+            },
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 13.sp,
+            textAlign = TextAlign.Center,
+        )
+        TextButton(
+            onClick = onRefresh,
+            modifier = Modifier.testTag("remote_apps_refresh"),
+        ) {
+            Icon(Icons.Rounded.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("Atualizar")
         }
     }
 }

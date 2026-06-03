@@ -113,6 +113,11 @@ class RemoteViewModel @Inject constructor(
     /** Pins [app] to the home screen, or unpins it if already pinned. */
     fun toggleFavorite(app: InstalledApp) = favoriteAppsStore.toggle(app)
 
+    /** Asks the TV again for its installed-app list (manual refresh). */
+    fun refreshApps() {
+        session.refreshInstalledApps()
+    }
+
     /**
      * Routes a touch-derived [intent] to the matching domain action.
      *

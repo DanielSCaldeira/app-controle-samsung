@@ -186,6 +186,14 @@ class RemoteSession @Inject constructor(
         send(TizenProtocol.sendKey(keyCode, command))
 
     /**
+     * Re-requests the TV's installed-app list (`ed.installedApp.get`) on the open
+     * socket. The list is already requested automatically when the socket opens;
+     * this backs a manual "refresh" affordance in the UI. Returns `false` when no
+     * socket is currently open.
+     */
+    fun refreshInstalledApps(): Boolean = send(TizenProtocol.requestInstalledApps())
+
+    /**
      * Launches a Tizen app by id (e.g. Netflix `11101200001`).
      *
      * Prefers the REST endpoint (`POST /api/v2/applications/{appId}`), which 2020+
