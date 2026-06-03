@@ -83,6 +83,7 @@ import kotlinx.coroutines.delay
 import com.factory.samsungremote.R
 import com.factory.samsungremote.data.registry.AppShortcut
 import com.factory.samsungremote.data.registry.AppShortcutCatalog
+import com.factory.samsungremote.data.registry.PopularApps
 import com.factory.samsungremote.data.registry.RemoteKey
 import com.factory.samsungremote.data.registry.RemoteKeyCatalog
 import com.factory.samsungremote.network.discovery.DiscoveredTv
@@ -366,21 +367,23 @@ fun RemoteScreen(
                     )
                 }
             }
-            // Full list of apps the TV reports as installed (ADR-0010/0011). Always
-            // shown so the feature is discoverable; falls back to a hint + refresh
-            // while the list is empty (not connected yet, or the TV hasn't replied).
-            SectionCard(title = "Todos os apps da TV") {
-                if (installedApps.isEmpty()) {
-                    AppsEmptyState(connectionState = connectionState, onRefresh = onRefreshApps)
-                } else {
-                    InstalledAppGrid(
-                        apps = installedApps,
-                        favoriteIds = favoriteIds,
-                        onLaunch = launchById,
-                        onToggleFavorite = onToggleFavorite,
-                        tagPrefix = "remote_installed_",
-                    )
+            // App pick-list to launch and pin (ADR-0010/0011): the apps the TV
+            // reported when discovery works, otherwise a curated popular-apps list
+            // (some 2020+ firmwares don't answer the discovery request). Either way
+            // the user can star apps into "Meus apps".
+            val discovered = installedApps.isNotEmpty()
+            val pickList = if (discovered) installedApps else PopularApps.list
+            SectionCard(title = if (discovered) "Todos os apps da TV" else "Apps populares") {
+                if (!discovered) {
+                    AppsHint(connectionState = connectionState, onRefresh = onRefreshApps)
                 }
+                InstalledAppGrid(
+                    apps = pickList,
+                    favoriteIds = favoriteIds,
+                    onLaunch = launchById,
+                    onToggleFavorite = onToggleFavorite,
+                    tagPrefix = "remote_installed_",
+                )
             }
             Spacer(Modifier.height(8.dp))
         }
@@ -914,12 +917,12 @@ private fun InstalledAppGrid(
 }
 
 /**
- * Placeholder shown in the "Todos os apps da TV" card while the discovered-app
- * list is empty: a short hint (whether the TV is connected) plus a manual
- * "Atualizar" button that re-requests the list (ADR-0011).
+ * Hint shown above the curated "Apps populares" pick-list when the TV did not
+ * return its installed-app list (ADR-0011): explains why and offers a manual
+ * "Atualizar" that re-requests discovery (works on TVs that support it).
  */
 @Composable
-private fun AppsEmptyState(
+private fun AppsHint(
     connectionState: ConnectionState?,
     onRefresh: () -> Unit,
     modifier: Modifier = Modifier,
@@ -932,9 +935,10 @@ private fun AppsEmptyState(
     ) {
         Text(
             text = if (connected) {
-                "Nenhum app recebido da TV ainda. Toque em Atualizar."
+                "Sua TV não enviou a lista de apps. Escolha abaixo e fixe com a ⭐, " +
+                    "ou toque em Atualizar para tentar de novo."
             } else {
-                "Conecte à TV para listar os apps instalados."
+                "Conecte à TV para abrir/fixar apps. Enquanto isso, escolha abaixo."
             },
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 13.sp,
