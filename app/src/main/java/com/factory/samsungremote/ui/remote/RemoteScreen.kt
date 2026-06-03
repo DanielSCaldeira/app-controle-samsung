@@ -178,7 +178,7 @@ private fun appShortcut(appId: String): AppShortcut =
         "Missing app shortcut in catalog: $appId"
     }
 
-private val AppNetflix = appShortcut("11101200001")
+private val AppNetflix = appShortcut("3201907018807")
 private val AppPrime = appShortcut("3201910019365")
 private val AppDisney = appShortcut("3201901017640")
 private val AppYouTube = appShortcut("111299001912")

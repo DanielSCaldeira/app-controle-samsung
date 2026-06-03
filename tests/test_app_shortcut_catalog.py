@@ -35,7 +35,7 @@ REGISTRY = (
 APP_SHORTCUT_KT = REGISTRY / "AppShortcut.kt"
 CATALOG_KT = REGISTRY / "AppShortcutCatalog.kt"
 
-# AppShortcut(appId = "11101200001", name = "Netflix")  (deepLinkKey optional)
+# AppShortcut(appId = "3201907018807", name = "Netflix")  (deepLinkKey optional)
 _ENTRY_RE = re.compile(
     r'AppShortcut\(\s*'
     r'appId\s*=\s*"(?P<appId>[^"]*)"\s*,\s*'
@@ -98,11 +98,15 @@ def test_each_expected_app_has_non_empty_appid(app_name):
 
 
 def test_netflix_app_id_matches_tizen_id():
-    """Netflix usa o appId Tizen documentado (11101200001)."""
+    """Netflix usa o appId Tizen validado em campo para Tizen 2020+ (3201907018807).
+
+    O ID antigo 3201907018807 retorna 404 em /api/v2/applications na TV 2024 testada;
+    o 3201907018807 abre o app (ADR-0010).
+    """
     _source_files_exist()
     by_name = {e["name"]: e for e in _parse_entries()}
-    assert by_name.get("Netflix", {}).get("appId") == "11101200001", (
-        "Netflix deve usar o appId Tizen 11101200001"
+    assert by_name.get("Netflix", {}).get("appId") == "3201907018807", (
+        "Netflix deve usar o appId Tizen 3201907018807"
     )
 
 

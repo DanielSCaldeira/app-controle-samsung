@@ -7,7 +7,7 @@ de controle. Cada atalho chama ``CommandRepository.launchApp(appId)`` (via
 faz *fallback* para navegação por tecla (``KEY_HOME``).
 
 Acceptance criteria verificado aqui:
-  **Teste de UI: tocar o atalho Netflix invoca ``launchApp('11101200001')`` no
+  **Teste de UI: tocar o atalho Netflix invoca ``launchApp('3201907018807')`` no
   ViewModel fake; os 4 atalhos disparam o ``appId`` correto; fallback acionado
   quando ``launchApp`` falha.**
 
@@ -93,7 +93,7 @@ def _read(path: Path) -> str:
 # This is the contract under test for the acceptance criteria:
 #   tap shortcut -> RemoteIntent.LaunchApp(appId) -> launchApp(appId) frame.
 SHORTCUTS = [
-    ("APP_NETFLIX", "11101200001", "Netflix"),
+    ("APP_NETFLIX", "3201907018807", "Netflix"),
     ("APP_PRIME", "3201910019365", "Prime Video"),
     ("APP_DISNEY", "3201901017640", "Disney+"),
     ("APP_YOUTUBE", "111299001912", "YouTube"),
@@ -347,7 +347,7 @@ class NoopFactory : WebSocket.Factory {
 
 // The four streaming shortcut appIds, in the screen's display order.
 private val SHORTCUT_APP_IDS = listOf(
-    "11101200001",   // Netflix
+    "3201907018807",   // Netflix
     "3201910019365", // Prime Video
     "3201901017640", // Disney+
     "111299001912",  // YouTube
@@ -389,7 +389,7 @@ fun main() {
         val transport = FakeTransport(connected = false)
         val scope = CoroutineScope(StandardTestDispatcher(TestCoroutineScheduler()))
         val vm = RemoteViewModel(CommandRepository(transport), RemoteSession(NoopFactory(), scope))
-        val netflix = AppShortcutCatalog.findByAppId("11101200001")
+        val netflix = AppShortcutCatalog.findByAppId("3201907018807")
         if (netflix == null) {
             println("FB_COUNT|<<MISSING>>")
         } else {
@@ -542,14 +542,14 @@ def test_each_shortcut_launches_its_app_id(out, _tag, app_id, _name):
     )
 
 
-def test_netflix_shortcut_invokes_launch_app_11101200001(out):
+def test_netflix_shortcut_invokes_launch_app_3201907018807(out):
     # The acceptance criteria calls out Netflix explicitly.
-    frame = out.get("LAUNCH_11101200001")
+    frame = out.get("LAUNCH_3201907018807")
     assert frame is not None and frame != "<<MISSING>>", (
         f"atalho Netflix não emitido: {out!r}"
     )
-    assert frame == _launch_frame("11101200001"), (
-        f"tocar Netflix deve invocar launchApp('11101200001'): {frame!r}"
+    assert frame == _launch_frame("3201907018807"), (
+        f"tocar Netflix deve invocar launchApp('3201907018807'): {frame!r}"
     )
 
 
@@ -573,7 +573,7 @@ def test_fallback_to_home_key_when_launch_fails(out):
     assert out.get("FB_COUNT") == "2", (
         f"fallback deveria produzir 2 frames (launch + home), veio: {out.get('FB_COUNT')!r}"
     )
-    assert out.get("FB_0") == _launch_frame("11101200001"), (
+    assert out.get("FB_0") == _launch_frame("3201907018807"), (
         f"primeiro frame do fallback deve ser o launchApp que falhou: {out.get('FB_0')!r}"
     )
     assert out.get("FB_1") == _key_frame(FALLBACK_CODE), (

@@ -14,7 +14,9 @@ object AppShortcutCatalog {
 
     /** All applications known to the catalog, in display-friendly order. */
     val shortcuts: List<AppShortcut> = listOf(
-        AppShortcut(appId = "11101200001", name = "Netflix"),
+        // 2020+ Tizen (validado em campo, QN70Q65DAGXZD/2024): o appId Netflix é
+        // 3201907018807; o antigo 11101200001 retorna 404 em /api/v2/applications.
+        AppShortcut(appId = "3201907018807", name = "Netflix"),
         AppShortcut(appId = "3201910019365", name = "Prime Video"),
         AppShortcut(appId = "3201901017640", name = "Disney+"),
         AppShortcut(appId = "111299001912", name = "YouTube"),
