@@ -67,7 +67,7 @@ object SamsungDeviceInfoParser {
             device?.optString("name"),
             root.optString("name"),
             modelName,
-        ) ?: id
+        )?.let(::decodeHtmlEntities) ?: id
 
         return DiscoveredTv(
             id = id,
@@ -76,6 +76,19 @@ object SamsungDeviceInfoParser {
             modelName = modelName,
         )
     }
+
+    /**
+     * Decodes the handful of HTML entities Samsung TVs embed in their `name`
+     * (e.g. a set advertised as `70&quot; QLED` should display as `70" QLED`).
+     */
+    private fun decodeHtmlEntities(value: String): String = value
+        .replace("&quot;", "\"")
+        .replace("&#34;", "\"")
+        .replace("&apos;", "'")
+        .replace("&#39;", "'")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&amp;", "&")
 
     private fun isSamsung(root: JSONObject, device: JSONObject?): Boolean {
         val type = firstNonBlank(device?.optString("type"), root.optString("type")).orEmpty()

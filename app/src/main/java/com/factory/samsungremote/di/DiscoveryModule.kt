@@ -2,10 +2,12 @@ package com.factory.samsungremote.di
 
 import android.content.Context
 import com.factory.samsungremote.data.registry.TvRegistry
+import com.factory.samsungremote.network.discovery.CompositeCandidateSource
 import com.factory.samsungremote.network.discovery.DiscoveryService
 import com.factory.samsungremote.network.discovery.MdnsCandidateSource
 import com.factory.samsungremote.network.discovery.RestTvCandidateValidator
 import com.factory.samsungremote.network.discovery.SsdpCandidateSource
+import com.factory.samsungremote.network.discovery.SubnetScanCandidateSource
 import com.factory.samsungremote.network.discovery.TvCandidateSource
 import com.factory.samsungremote.network.discovery.TvCandidateValidator
 import com.factory.samsungremote.network.discovery.TvReconciler
@@ -60,12 +62,23 @@ object DiscoveryModule {
     @Named(SSDP_SOURCE)
     fun provideSsdpCandidateSource(): TvCandidateSource = SsdpCandidateSource()
 
+    /**
+     * The "fallback" source the [DiscoveryService] starts when SSDP confirms no
+     * TV. Merges mDNS (for sets advertising a usable service) with a subnet
+     * sweep (the reliable backstop for sets that advertise nothing the app can
+     * resolve — e.g. recent Samsung models found only via `/api/v2/`).
+     */
     @Provides
     @Singleton
     @Named(MDNS_SOURCE)
     fun provideMdnsCandidateSource(
         @ApplicationContext context: Context,
-    ): TvCandidateSource = MdnsCandidateSource(context)
+    ): TvCandidateSource = CompositeCandidateSource(
+        listOf(
+            MdnsCandidateSource(context),
+            SubnetScanCandidateSource(),
+        ),
+    )
 
     @Provides
     @Singleton

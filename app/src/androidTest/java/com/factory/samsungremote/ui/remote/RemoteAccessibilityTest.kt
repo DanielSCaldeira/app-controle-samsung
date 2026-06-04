@@ -1,11 +1,14 @@
 package com.factory.samsungremote.ui.remote
 
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertWidthIsAtLeast
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
 import org.junit.Rule
 import org.junit.Test
@@ -81,6 +84,10 @@ class RemoteAccessibilityTest {
             RemoteScreen(onIntent = { true })
         }
 
+        // The keypad + text-entry buttons live behind the keypad toggle; reveal
+        // them so every button is in the tree for this pass.
+        composeRule.onNodeWithTag(RemoteTestTags.KEYPAD_TOGGLE).performClick()
+
         // TalkBack reads the contentDescription aloud; none may be empty.
         buttonTags.forEach { tag ->
             composeRule.onNodeWithTag(tag).assert(hasNonEmptyContentDescription())
@@ -92,6 +99,9 @@ class RemoteAccessibilityTest {
         composeRule.setContent {
             RemoteScreen(onIntent = { true })
         }
+
+        // Reveal the keypad + text-entry buttons before measuring them.
+        composeRule.onNodeWithTag(RemoteTestTags.KEYPAD_TOGGLE).performClick()
 
         // Material accessibility floor: ≥ 48 dp on both axes for every button.
         buttonTags.forEach { tag ->

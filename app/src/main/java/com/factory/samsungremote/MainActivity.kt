@@ -1,9 +1,11 @@
 package com.factory.samsungremote
 
 import android.os.Bundle
+import android.os.SystemClock
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -23,6 +25,18 @@ import dagger.hilt.android.AndroidEntryPoint
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Install the back-compat splash screen BEFORE super.onCreate() so it is
+        // shown from cold start. The keepOnScreenCondition is bounded by a short
+        // timeout: the splash is held only until the deadline elapses, then it is
+        // always dismissed. This is a safety net — even if initialization is slow
+        // or partially fails, the splash can never get stuck indefinitely and the
+        // app always transitions to DiscoveryRoute.
+        val splashScreen = installSplashScreen()
+        val splashDeadline = SystemClock.uptimeMillis() + SPLASH_MAX_DURATION_MS
+        splashScreen.setKeepOnScreenCondition {
+            SystemClock.uptimeMillis() < splashDeadline
+        }
+
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
@@ -30,6 +44,15 @@ class MainActivity : ComponentActivity() {
                 SamsungRemoteNavigation()
             }
         }
+    }
+
+    private companion object {
+        /**
+         * Upper bound (≈2s) the launch splash may stay on screen. Once elapsed the
+         * keepOnScreenCondition returns false and the splash is dismissed, so the
+         * user is never trapped on the initial 'Samsung Remote' screen.
+         */
+        const val SPLASH_MAX_DURATION_MS = 2_000L
     }
 }
 

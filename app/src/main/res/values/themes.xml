@@ -2,4 +2,16 @@
 <resources>
     <!-- Base theme; the actual colors are driven by Compose Material 3 at runtime. -->
     <style name="Theme.SamsungRemote" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <!-- Launch theme using the back-compat SplashScreen API. Applied to the
+         application/MainActivity so the splash shows immediately at cold start;
+         MainActivity then hands control back to Theme.SamsungRemote via
+         postSplashScreenTheme. A short keepOnScreenCondition timeout in
+         MainActivity guarantees the splash is dismissed and the app reaches
+         DiscoveryRoute even if initialization is slow. -->
+    <style name="Theme.SamsungRemote.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/splash_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.SamsungRemote</item>
+    </style>
 </resources>

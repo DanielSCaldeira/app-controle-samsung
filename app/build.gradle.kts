@@ -59,6 +59,9 @@ ksp {
 dependencies {
     // AndroidX core / lifecycle
     implementation(libs.androidx.core.ktx)
+    // Splash screen (back-compat SplashScreen API) — guarantees the launch splash
+    // is dismissed within a short timeout so the app always reaches DiscoveryRoute.
+    implementation(libs.androidx.core.splashscreen)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
@@ -69,6 +72,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.material.icons.extended)
     debugImplementation(libs.androidx.compose.ui.tooling)
 
     // DI — Hilt

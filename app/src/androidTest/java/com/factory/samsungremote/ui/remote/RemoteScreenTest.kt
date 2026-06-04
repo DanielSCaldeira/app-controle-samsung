@@ -6,6 +6,7 @@ import androidx.compose.ui.test.assertWidthIsAtLeast
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.dp
 import com.factory.samsungremote.data.registry.RemoteKeyCatalog
 import com.factory.samsungremote.viewmodel.RemoteIntent
@@ -167,9 +168,13 @@ class RemoteScreenTest {
             RemoteScreen(onIntent = { emitted += it; true })
         }
 
+        // The keypad lives behind the keypad toggle now; reveal it first.
+        composeRule.onNodeWithTag(RemoteTestTags.KEYPAD_TOGGLE).performClick()
+
         // Tapping each digit (0..9) fires the matching KEY_<n> on the fake callback.
         digitControls.forEach { (tag, expectedCode) ->
             emitted.clear()
+            composeRule.onNodeWithTag(tag).performScrollTo()
             composeRule.onNodeWithTag(tag).assertIsDisplayed()
             composeRule.onNodeWithTag(tag).performClick()
 
@@ -188,8 +193,10 @@ class RemoteScreenTest {
             RemoteScreen(onIntent = { true })
         }
 
-        // Material accessibility floor: every digit honors a ≥ 48 dp touch target.
+        // Reveal the keypad panel, then assert each digit's touch target.
+        composeRule.onNodeWithTag(RemoteTestTags.KEYPAD_TOGGLE).performClick()
         digitControls.forEach { (tag, _) ->
+            composeRule.onNodeWithTag(tag).performScrollTo()
             composeRule.onNodeWithTag(tag).assertWidthIsAtLeast(48.dp)
             composeRule.onNodeWithTag(tag).assertHeightIsAtLeast(48.dp)
         }

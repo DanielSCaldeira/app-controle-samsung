@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Background painted behind the launch splash icon. Kept neutral/light to
+         match the Material Light app theme. -->
+    <color name="splash_background">#FFFFFFFF</color>
+</resources>

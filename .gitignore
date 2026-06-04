@@ -1,11 +1,48 @@
+# =========================
+#  Android / Gradle
+# =========================
 *.iml
 .gradle/
-/local.properties
-/.idea/
-.DS_Store
 /build
+build/
+app/build/
 /captures
 .externalNativeBuild
 .cxx
+
+# Configurações locais (caminho do SDK, segredos) — nunca versionar
+/local.properties
 local.properties
-app/build/
+/keystore.properties
+
+# =========================
+#  Kotlin
+# =========================
+.kotlin/
+
+# =========================
+#  Android Studio / IntelliJ
+# =========================
+/.idea/
+*.hprof
+
+# =========================
+#  Python (suíte de testes da fábrica em tests/)
+# =========================
+.pytest_cache/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# =========================
+#  Artefatos locais de execução / capturas de tela
+# =========================
+/.run/
+*.log
+
+# =========================
+#  Sistema operacional
+# =========================
+.DS_Store
+Thumbs.db

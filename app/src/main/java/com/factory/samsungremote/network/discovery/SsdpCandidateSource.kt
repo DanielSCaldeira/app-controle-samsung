@@ -7,11 +7,10 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.isActive
+import java.io.IOException
 import java.net.DatagramPacket
-import java.net.Inet4Address
 import java.net.InetAddress
 import java.net.MulticastSocket
-import java.net.NetworkInterface
 import java.net.SocketTimeoutException
 
 /**
@@ -47,11 +46,6 @@ class SsdpCandidateSource(
         val socket = MulticastSocket()
         socket.reuseAddress = true
         socket.soTimeout = responseTimeoutMs
-        // Pin multicast egress to the LAN interface. With multiple interfaces up
-        // (e.g. Wi-Fi + cellular), an unbound socket may send the M-SEARCH out
-        // the wrong one, so the TV never receives it. Best-effort: never fail
-        // discovery if no suitable interface is found.
-        lanMulticastInterface()?.let { runCatching { socket.networkInterface = it } }
         try {
             searchTargets.forEach { target ->
                 val payload = buildMSearch(target).toByteArray(Charsets.US_ASCII)
@@ -70,6 +64,11 @@ class SsdpCandidateSource(
                 val host = extractLocationHost(response) ?: packet.address?.hostAddress
                 if (!host.isNullOrBlank()) emit(host)
             }
+        } catch (_: IOException) {
+            // SSDP is best-effort: on networks where multicast send/receive is
+            // unavailable (e.g. ENETUNREACH), emit nothing and complete normally
+            // so the mDNS fallback still runs. A throw here would abort the whole
+            // discovery pipeline.
         } finally {
             socket.close()
         }
@@ -84,21 +83,6 @@ class SsdpCandidateSource(
             append("ST: ").append(searchTarget).append("\r\n")
             append("\r\n")
         }
-
-    /**
-     * Picks an up, multicast-capable, non-loopback interface that owns a
-     * site-local IPv4 address (the Wi-Fi/LAN interface on a typical phone).
-     * Returns `null` if enumeration fails or none qualifies, in which case the
-     * socket keeps the OS default interface.
-     */
-    private fun lanMulticastInterface(): NetworkInterface? = runCatching {
-        NetworkInterface.getNetworkInterfaces()
-            ?.toList()
-            ?.firstOrNull { nif ->
-                nif.isUp && !nif.isLoopback && nif.supportsMulticast() &&
-                    nif.inetAddresses.toList().any { it is Inet4Address && it.isSiteLocalAddress }
-            }
-    }.getOrNull()
 
     /** Extracts the host from the `LOCATION` header URL, or `null` if absent/unparseable. */
     private fun extractLocationHost(response: String): String? {
