@@ -1,3 +1,7 @@
+// Import explicito: dentro do script `java` resolve para a extensao Gradle de mesmo
+// nome, que sombrearia o pacote java.util.
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -5,6 +9,18 @@ plugins {
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
 }
+
+// Credenciais de assinatura da release. O arquivo fica fora do controle de versao
+// (ver .gitignore) e aponta para um keystore guardado fora do repositorio. Quando
+// ele nao existe — clone limpo, CI sem segredos — a release simplesmente sai sem
+// assinatura em vez de quebrar o build.
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties()
+if (keystorePropertiesFile.exists()) {
+    keystorePropertiesFile.inputStream().use { stream -> keystoreProperties.load(stream) }
+}
+val keystorePath: String? = keystoreProperties.getProperty("storeFile")
+val hasReleaseSigning = keystorePath != null && rootProject.file(keystorePath).exists()
 
 android {
     namespace = "com.factory.samsungremote"
@@ -15,13 +31,27 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = 1
-        versionName = "0.1.0"
+        versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = rootProject.file(keystorePath!!)
+                storePassword = keystoreProperties.getProperty("storePassword")
+                keyAlias = keystoreProperties.getProperty("keyAlias")
+                keyPassword = keystoreProperties.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

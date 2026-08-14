@@ -12,6 +12,53 @@ Funciona com modelos modernos (4K, QLED, Crystal, Neo QLED e OLED, ~2016+) e ope
 
 ---
 
+## 📥 Baixar e instalar
+
+O APK **release assinado**, pronto para instalar no celular, fica na pasta
+[**`dist/`**](https://github.com/DanielSCaldeira/app-controle-samsung/tree/main/dist)
+deste repositório.
+
+| | Endereço |
+|---|---|
+| 📁 **Pasta com o aplicativo** | https://github.com/DanielSCaldeira/app-controle-samsung/tree/main/dist |
+| 📦 **APK v1.0.0 (página)** | https://github.com/DanielSCaldeira/app-controle-samsung/blob/main/dist/controle-samsung-v1.0.0.apk |
+| ⬇️ **Download direto** | https://github.com/DanielSCaldeira/app-controle-samsung/raw/main/dist/controle-samsung-v1.0.0.apk |
+| 🏷️ **Última release** | https://github.com/DanielSCaldeira/app-controle-samsung/releases/latest |
+
+> ⚠️ **Este repositório é privado.** Os links acima só abrem para quem estiver **logado no
+> GitHub** com uma conta que tenha acesso ao repositório — inclusive no navegador do
+> celular. Faça login antes de tocar no link, senão o GitHub devolve *404*.
+
+**Requisitos:** Android **8.0 (API 26)** ou superior · ~12 MB · celular na **mesma rede
+Wi-Fi** da TV.
+
+### Instalando pelo próprio celular
+
+1. Abra o **download direto** no navegador do celular (já logado no GitHub) e baixe o
+   `.apk`.
+2. Ao abrir o arquivo baixado, o Android vai pedir para permitir **"Instalar apps
+   desconhecidos"** para o navegador (ou para o app **Arquivos**) — autorize e volte.
+3. Toque em **Instalar**. Se aparecer o aviso do Play Protect ("app desconhecido"),
+   escolha **Instalar assim mesmo** — o APK é assinado com um certificado próprio, não
+   distribuído pela Play Store.
+4. Abra o app com o celular na **mesma rede Wi-Fi da TV** e siga o
+   [passo a passo de uso](#-como-usar).
+
+### Instalando pelo cabo (USB)
+
+Com a *Depuração USB* ativada (veja [Instalando em um celular físico](#instalando-em-um-celular-físico)):
+
+```bash
+adb install -r dist/controle-samsung-v1.0.0.apk
+```
+
+> 🔑 **Atualizações:** toda versão nova precisa ser assinada com o **mesmo keystore** da
+> v1.0.0. Com uma chave diferente, a instalação por cima falha com
+> `INSTALL_FAILED_UPDATE_INCOMPATIBLE` e é preciso desinstalar o app antes (perdendo os
+> pareamentos salvos).
+
+---
+
 ## ✨ Funcionalidades
 
 - **Descoberta automática** de TVs Samsung na LAN via SSDP (multicast UDP) e mDNS (NSD),
@@ -103,6 +150,7 @@ sdk.dir=C\:\\Users\\<voce>\\AppData\\Local\\Android\\Sdk
 | `make doctor` | Checa Java, `adb` e dispositivos conectados |
 | `make build` | Compila e roda as verificações do módulo `app` |
 | `make assemble-debug` | Gera o APK debug |
+| `make assemble-release` | Gera o APK release **assinado** (requer `keystore.properties`) |
 | `make install-debug` | Pré-checa o device e instala o APK no aparelho conectado |
 | `make test` | Testes unitários JVM |
 | `make android-test` | Testes instrumentados (Room + Compose UI) em device conectado |
@@ -111,6 +159,32 @@ sdk.dir=C\:\\Users\\<voce>\\AppData\\Local\\Android\\Sdk
 
 > No Windows o `Makefile` chama `./gradlew.bat`. Sem Make, use os alvos Gradle
 > diretamente, ex.: `./gradlew.bat :app:installDebug`.
+
+### Gerando um APK release assinado
+
+A assinatura é lida de um **`keystore.properties`** na raiz (não versionado — está no
+`.gitignore`), apontando para um keystore guardado **fora** do repositório:
+
+```properties
+storeFile=C:/Users/<voce>/.keystores/samsung-remote-release.jks
+storePassword=<senha>
+keyAlias=samsung-remote
+keyPassword=<senha>
+```
+
+Se o arquivo não existir, o build release ainda compila — só sai **sem assinatura**
+(e um APK unsigned não instala no aparelho). Para criar um keystore novo:
+
+```bash
+keytool -genkeypair -v -keystore samsung-remote-release.jks -alias samsung-remote \
+  -keyalg RSA -keysize 2048 -validity 10950
+```
+
+Depois, `make assemble-release` gera `app/build/outputs/apk/release/app-release.apk`.
+Confira a assinatura com
+`apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk`.
+
+O APK publicado em [`dist/`](dist/) sai exatamente desse fluxo.
 
 ### Instalando em um celular físico
 
