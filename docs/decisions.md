@@ -290,3 +290,53 @@ ainda não são renderizados — usa-se a inicial; fica como melhoria futura.
 **Alternativas.** *Catálogo fixo de IDs* — descartado: é a causa do bug (IDs variam).
 *Hard-code por modelo* — inviável de manter. *Só Favoritos com IDs resolvidos (sem lista
 completa)* — preterido: o usuário escolheu também expor todos os apps da TV.
+
+---
+
+## ADR-0012 — Token de autorização é da sessão, não só do pareamento
+
+**Status:** Accepted · 2026-08-15
+
+**Contexto.** Depois de instalar a build **release** v1.0.0, a TV voltou a exibir o aviso
+"permitir que este dispositivo se conecte?" **a cada uso** — inclusive com a *notificação
+de acesso* desligada no aparelho. O pedido reaparecer significa, do lado da TV, que o
+cliente chegou **sem um token que ela reconheça**. Revisando o fluxo, o token só era
+gravado em um lugar: o handshake do `PairingManager`. Dois caminhos furavam isso:
+
+1. **Rotação de token descartada.** O Tizen reemite `data.token` no `ms.channel.connect`
+   da conexão de controle e, em vários firmwares, **rotaciona** o valor. O
+   `RemoteSession` lia o evento mas ignorava o token — então o app seguia guardando o do
+   pareamento e, na abertura seguinte, replicava um token que a TV já havia invalidado.
+2. **`ms.channel.unauthorized` alimentando o laço de reconexão.** A sessão reconecta com
+   backoff exponencial e orçamento `Int.MAX_VALUE`; uma recusa fechava o socket como
+   qualquer queda, então o app reconectava a cada ≤5 s **para sempre** — e cada tentativa
+   reabria o aviso na tela da TV. É exatamente o sintoma "pede permissão toda hora".
+
+**Decisão.** O token passa a ser responsabilidade da **sessão viva**, não só do
+pareamento:
+
+- `RemoteSession` recebe um `TokenStore` (implementado por `RegistryTokenStore` sobre o
+  `TvRegistry`, que cifra antes de persistir) e grava **todo** token que a TV emitir;
+- o socket — inclusive cada reconexão — é montado a partir do token **mais recente**
+  (`activeToken`), nunca do capturado no `connect()`;
+- `ms.channel.unauthorized` vira **estado terminal**: para o laço, apaga o token morto e
+  devolve `ConnectionState.Error` pedindo um novo pareamento;
+- `TvRegistry.getToken` degrada para `null` (limpando a linha) quando o valor guardado
+  não decifra — Keystore recriado após restauração/reinstalação não trava mais o fluxo;
+- `TvRegistry.saveToken`/`clearToken` alteram **só** a coluna do token, preservando
+  `mac_address` (usado pelo Wake-on-LAN) e `last_connected_at`.
+
+**Consequências.** (+) O pedido de autorização volta a ser **uma vez por aparelho**.
+(+) Uma recusa deixa de virar tempestade de avisos na TV. (+) Cobertura JVM:
+`RemoteSessionTokenRenewalTest` fixa os dois comportamentos (token rotacionado é
+persistido e replicado na reconexão; recusa é terminal e limpa o token). (−) O
+`RemoteSession` passa a conhecer um seam de persistência — mantido como interface no
+próprio pacote `network/session` para não arrastar Room/cripto para dentro da rede.
+(−) Depois de uma recusa, voltar a controlar exige reabrir o app (a tela de controle não
+tem rota de volta para a descoberta) — aceitável por ora, anotado como melhoria.
+
+**Alternativas.** *Pular o handshake quando já existe token* — adiado: reduz um socket
+por abertura, mas quebra o contrato coberto por `PairingManagerTest`/`test_pairing_manager.py`
+sem atacar a causa. *Mandar `token` também nas chamadas REST da porta 8001* — descartado:
+os clientes de referência não enviam, e alterar isso arriscaria regressão no lançamento de
+apps sem evidência de que a porta 8001 dispare o aviso.

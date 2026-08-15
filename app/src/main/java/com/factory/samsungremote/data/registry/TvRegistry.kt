@@ -1,6 +1,7 @@
 package com.factory.samsungremote.data.registry
 
 import com.factory.samsungremote.data.crypto.TokenCipher
+import com.factory.samsungremote.data.crypto.TokenCipherException
 import com.factory.samsungremote.data.db.KnownTv
 import com.factory.samsungremote.data.db.KnownTvDao
 import javax.inject.Inject
@@ -44,14 +45,53 @@ class TvRegistry @Inject constructor(
     }
 
     /**
+     * (Re)sets only the pairing token of an already-stored TV, leaving every
+     * other field — name, ip, `mac_address`, `last_connected_at` — untouched.
+     *
+     * This is what the live session uses when the TV rotates its token
+     * mid-connection (see
+     * [com.factory.samsungremote.network.session.TokenStore]): unlike [saveTv],
+     * it cannot silently blank out fields the caller does not know about.
+     *
+     * @return `true` when a matching TV was found and updated, `false` when no TV
+     *         with that id is stored (the caller can then insert one).
+     */
+    suspend fun saveToken(id: String, token: String): Boolean {
+        val existing = dao.getById(id) ?: return false
+        dao.upsert(existing.copy(tokenEncrypted = cipher.encrypt(token)))
+        return true
+    }
+
+    /**
+     * Clears the stored token of the TV identified by [id], keeping the TV
+     * itself registered. Used when the TV answers `ms.channel.unauthorized`: the
+     * token is dead, so the next connection must run a full handshake instead of
+     * replaying a value the TV will keep rejecting.
+     */
+    suspend fun clearToken(id: String) {
+        val existing = dao.getById(id) ?: return
+        if (existing.tokenEncrypted == null) return
+        dao.upsert(existing.copy(tokenEncrypted = null))
+    }
+
+    /**
      * Returns the decrypted pairing token for the TV with the given [id], or
      * `null` if the TV is unknown or has no token stored.
      *
-     * @throws com.factory.samsungremote.data.crypto.TokenCipherException if a
-     *         stored token exists but cannot be decrypted (e.g. tampered data).
+     * A stored token that cannot be decrypted (Keystore key regenerated after a
+     * restore/reinstall, tampered row) is treated as "no token" rather than an
+     * error: it is dropped from the row and `null` is returned, so the flow falls
+     * back to a normal pairing handshake instead of failing on every attempt.
      */
-    suspend fun getToken(id: String): String? =
-        dao.getById(id)?.tokenEncrypted?.let(cipher::decrypt)
+    suspend fun getToken(id: String): String? {
+        val encrypted = dao.getById(id)?.tokenEncrypted ?: return null
+        return try {
+            cipher.decrypt(encrypted)
+        } catch (_: TokenCipherException) {
+            clearToken(id)
+            null
+        }
+    }
 
     /**
      * Updates the last-known [ipAddress] of the TV identified by [id], leaving

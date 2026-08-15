@@ -21,9 +21,13 @@ deste repositório.
 | | Endereço |
 |---|---|
 | 📁 **Pasta com o aplicativo** | https://github.com/DanielSCaldeira/app-controle-samsung/tree/main/dist |
-| 📦 **APK v1.0.0 (página)** | https://github.com/DanielSCaldeira/app-controle-samsung/blob/main/dist/controle-samsung-v1.0.0.apk |
-| ⬇️ **Download direto** | https://github.com/DanielSCaldeira/app-controle-samsung/raw/main/dist/controle-samsung-v1.0.0.apk |
+| 📦 **APK v1.0.1 (página)** | https://github.com/DanielSCaldeira/app-controle-samsung/blob/main/dist/controle-samsung-v1.0.1.apk |
+| ⬇️ **Download direto** | https://github.com/DanielSCaldeira/app-controle-samsung/raw/main/dist/controle-samsung-v1.0.1.apk |
 | 🏷️ **Última release** | https://github.com/DanielSCaldeira/app-controle-samsung/releases/latest |
+
+> 🆕 **v1.0.1 — corrige a TV pedindo permissão a toda hora.** Instale por cima da v1.0.0
+> (mesma assinatura, **não** precisa desinstalar): o pareamento salvo é mantido. Detalhes
+> em [Autorização da TV](#-autorização-da-tv-token-de-pareamento).
 
 > ⚠️ **Este repositório é privado.** Os links acima só abrem para quem estiver **logado no
 > GitHub** com uma conta que tenha acesso ao repositório — inclusive no navegador do
@@ -49,7 +53,7 @@ Wi-Fi** da TV.
 Com a *Depuração USB* ativada (veja [Instalando em um celular físico](#instalando-em-um-celular-físico)):
 
 ```bash
-adb install -r dist/controle-samsung-v1.0.0.apk
+adb install -r dist/controle-samsung-v1.0.1.apk
 ```
 
 > 🔑 **Atualizações:** toda versão nova precisa ser assinada com o **mesmo keystore** da
@@ -240,6 +244,28 @@ Toda a serialização/parse fica isolada em `TizenProtocol`:
 | `sendText("hi")` | `SendInputString` (Base64) | REST `imeInput` (best-effort, fallback WebSocket) |
 
 Detalhes e tabela completa em [`docs/architecture.md`](docs/architecture.md) §9.
+
+---
+
+## 🔓 Autorização da TV (token de pareamento)
+
+No primeiro acesso a TV mostra na tela o pedido **"Permitir que este dispositivo se
+conecte?"**. Ao aceitar, ela devolve um **token** que o app guarda **cifrado**
+(AES-256-GCM com chave no Android Keystore, tabela `known_tv`). Toda conexão seguinte
+replica esse token na URL do canal de controle — e por isso a TV **não** deve perguntar
+de novo.
+
+O que muda na **v1.0.1** (o pedido de permissão aparecia a cada uso):
+
+| Comportamento | Antes (v1.0.0) | Agora (v1.0.1) |
+|---|---|---|
+| TV emite um token novo (rotação) no meio da sessão | descartado — só o handshake de pareamento salvava token, então o app voltava a mandar um token que a TV já havia invalidado | `RemoteSession` persiste o token recebido e passa a usá-lo, inclusive nas reconexões |
+| TV responde `ms.channel.unauthorized` | a sessão reconectava indefinidamente (tentativas ilimitadas, backoff de até 5 s) e **cada tentativa reabria o aviso na TV** | estado terminal: para de reconectar, apaga o token morto e avisa para refazer o pareamento uma vez |
+| Token guardado não decifra (Keystore recriado após restauração/reinstalação) | exceção derrubava o fluxo a cada tentativa | trata como "sem token": limpa e refaz o pareamento normalmente |
+
+> Na TV, `Configurações → Geral → Gerenciador de Dispositivos Externos → Gerenciador de
+> Conexão de Dispositivos` lista os aparelhos autorizados. Se o celular tiver sido
+> **negado** ali alguma vez, remova-o da lista antes de parear de novo.
 
 ---
 

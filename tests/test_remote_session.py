@@ -56,6 +56,8 @@ CONNECTION_STATE_KT = SESSION_DIR / "ConnectionState.kt"
 # RemoteSession implements CommandTransport, so its source must be compiled too
 # (ADR-0010 added overrides for launchApp/sendText on this seam).
 COMMAND_TRANSPORT_KT = SESSION_DIR / "CommandTransport.kt"
+# ADR-0012: a sessao persiste o token que a TV emite/rotaciona por este seam.
+TOKEN_STORE_KT = SESSION_DIR / "TokenStore.kt"
 
 PROTO_DIR = PKG / "network" / "protocol"
 TIZEN_PROTOCOL_KT = PROTO_DIR / "TizenProtocol.kt"
@@ -65,7 +67,7 @@ REMOTE_KEY_KT = PKG / "data" / "registry" / "RemoteKey.kt"
 DISCOVERED_TV_KT = PKG / "network" / "discovery" / "DiscoveredTv.kt"
 
 REAL_SOURCES = [
-    REMOTE_SESSION_KT, CONNECTION_STATE_KT, COMMAND_TRANSPORT_KT,
+    REMOTE_SESSION_KT, CONNECTION_STATE_KT, COMMAND_TRANSPORT_KT, TOKEN_STORE_KT,
     TIZEN_PROTOCOL_KT, TIZEN_MESSAGE_KT,
     REMOTE_KEY_KT, DISCOVERED_TV_KT,
 ]

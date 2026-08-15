@@ -3,9 +3,13 @@
 Esta pasta guarda as builds **release assinadas** do app, prontas para instalar no
 celular sem precisar compilar nada.
 
-| Arquivo | Versão | Tamanho | Mínimo |
-|---------|--------|---------|--------|
-| [`controle-samsung-v1.0.0.apk`](controle-samsung-v1.0.0.apk) | 1.0.0 (`versionCode` 1) | ~12 MB | Android 8.0 (API 26) |
+| Arquivo | Versão | Tamanho | Mínimo | Observação |
+|---------|--------|---------|--------|------------|
+| [`controle-samsung-v1.0.1.apk`](controle-samsung-v1.0.1.apk) | **1.0.1** (`versionCode` 2) | ~12 MB | Android 8.0 (API 26) | **Atual.** Corrige a TV pedindo autorização a cada uso |
+| [`controle-samsung-v1.0.0.apk`](controle-samsung-v1.0.0.apk) | 1.0.0 (`versionCode` 1) | ~12 MB | Android 8.0 (API 26) | versão anterior |
+
+Todas as versões são assinadas com o **mesmo certificado**, então a 1.0.1 instala **por
+cima** da 1.0.0 sem desinstalar e sem perder o pareamento salvo.
 
 **Como baixar:** abra o arquivo acima e clique em **Download raw file** (ícone de download
 no canto superior direito). O repositório é privado — é preciso estar **logado no GitHub**

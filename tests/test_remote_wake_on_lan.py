@@ -51,6 +51,8 @@ VIEWMODEL_KT = PKG / "viewmodel" / "RemoteViewModel.kt"
 
 SESSION_DIR = PKG / "network" / "session"
 REMOTE_SESSION_KT = SESSION_DIR / "RemoteSession.kt"
+# ADR-0012: a sessao persiste o token que a TV emite/rotaciona por este seam.
+TOKEN_STORE_KT = SESSION_DIR / "TokenStore.kt"
 CONNECTION_STATE_KT = SESSION_DIR / "ConnectionState.kt"
 COMMAND_TRANSPORT_KT = SESSION_DIR / "CommandTransport.kt"
 
@@ -64,7 +66,7 @@ DISCOVERED_TV_KT = PKG / "network" / "discovery" / "DiscoveredTv.kt"
 
 REAL_SOURCES = [
     WAKE_ON_LAN_KT, VIEWMODEL_KT, REPO_KT,
-    REMOTE_SESSION_KT, CONNECTION_STATE_KT, COMMAND_TRANSPORT_KT,
+    REMOTE_SESSION_KT, CONNECTION_STATE_KT, COMMAND_TRANSPORT_KT, TOKEN_STORE_KT,
     TIZEN_PROTOCOL_KT, TIZEN_MESSAGE_KT,
     REMOTE_KEY_KT, DISCOVERED_TV_KT,
 ]

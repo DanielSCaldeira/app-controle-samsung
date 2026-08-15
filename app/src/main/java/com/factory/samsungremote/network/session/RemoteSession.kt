@@ -80,6 +80,10 @@ import javax.inject.Singleton
  * @param maxReconnectAttempts   Consecutive failed reconnections before giving up
  *                               with [ConnectionState.Error]. Reset to zero once a
  *                               connection succeeds.
+ * @param tokenStore             Where a token the TV (re)issues mid-session is
+ *                               persisted, and from where a rejected token is
+ *                               dropped. `null` (the unit-test default) simply
+ *                               skips persistence.
  */
 @Singleton
 class RemoteSession @Inject constructor(
@@ -94,6 +98,7 @@ class RemoteSession @Inject constructor(
     private val initialBackoffMillis: Long = DEFAULT_INITIAL_BACKOFF_MILLIS,
     private val maxBackoffMillis: Long = DEFAULT_MAX_BACKOFF_MILLIS,
     private val maxReconnectAttempts: Int = DEFAULT_MAX_RECONNECT_ATTEMPTS,
+    private val tokenStore: TokenStore? = null,
 ) : CommandTransport {
 
     private val _state = MutableStateFlow<ConnectionState>(ConnectionState.Disconnected)
@@ -136,6 +141,20 @@ class RemoteSession @Inject constructor(
     @Volatile
     private var connectedToken: String? = null
 
+    /**
+     * Freshest authorization token known for the current target: the one replayed
+     * by [connect], replaced whenever the TV issues a new one on
+     * `ms.channel.connect`, and cleared when the TV rejects the device.
+     *
+     * Every socket — including each automatic reconnection — is built from this
+     * value rather than from the token captured at [connect] time, so a rotation
+     * received mid-session is honoured immediately instead of the session going
+     * back to a token the TV has already replaced (which is what makes the set
+     * pop its authorization prompt again).
+     */
+    @Volatile
+    private var activeToken: String? = null
+
     /** The running connection-maintenance coroutine, if any. */
     private var connectionJob: kotlinx.coroutines.Job? = null
 
@@ -148,9 +167,10 @@ class RemoteSession @Inject constructor(
      * Returns immediately; observe [state] for progress.
      */
     fun connect(tv: DiscoveredTv, token: String?) {
-        val target = Target(host = tv.ipAddress, token = token)
+        val target = Target(tv = tv, token = token)
         connectedHost = target.host
         connectedToken = target.token
+        activeToken = target.token
         // Drop the previous TV's app list; the new one is requested on open.
         _installedApps.value = emptyList()
         scope.launch {
@@ -174,6 +194,7 @@ class RemoteSession @Inject constructor(
                 currentSocket.getAndSet(null)?.cancel()
                 connectedHost = null
                 connectedToken = null
+                activeToken = null
                 _state.value = ConnectionState.Disconnected
             }
         }
@@ -367,6 +388,18 @@ class RemoteSession @Inject constructor(
             // reconnect after an intentional teardown.
             val outcome = connectOnce(target)
 
+            // The TV refused the device. Reconnecting would make it show its
+            // authorization prompt again — every backoff tick, forever — so this
+            // is terminal: the stored token is dropped (it is dead) and the user
+            // is told to re-pair once, deliberately.
+            if (outcome.unauthorized) {
+                _state.value = ConnectionState.Error(
+                    message = "A TV recusou a autorização deste aparelho. " +
+                        "Refaça o pareamento e toque em Permitir na tela da TV.",
+                )
+                return
+            }
+
             // A live connection that later dropped resets the backoff budget.
             if (outcome.wasConnected) attempt = 0
 
@@ -408,7 +441,19 @@ class RemoteSession @Inject constructor(
                     }
 
                     is Signal.Text -> {
-                        TizenProtocol.parseEvent(signal.text)?.let(_events::tryEmit)
+                        val event = TizenProtocol.parseEvent(signal.text)
+                        if (event != null) {
+                            _events.tryEmit(event)
+                            rememberIssuedToken(target, event.token)
+                            if (event.event == EVENT_UNAUTHORIZED) {
+                                forgetToken(target)
+                                return Outcome(
+                                    wasConnected = connected,
+                                    error = null,
+                                    unauthorized = true,
+                                )
+                            }
+                        }
                         TizenProtocol.parseInstalledApps(signal.text)?.let {
                             _installedApps.value = it
                         }
@@ -432,15 +477,44 @@ class RemoteSession @Inject constructor(
     }
 
     /**
+     * Persists [issued] as the current token of [target] when the TV sent one and
+     * it differs from what we are already using.
+     *
+     * Tizen re-emits `data.token` on `ms.channel.connect`, sometimes rotating it.
+     * Keeping only the handshake's token (the previous behaviour) meant the fresh
+     * one was discarded, so the next launch replayed a token the TV had already
+     * invalidated and the set asked for authorization all over again.
+     */
+    private fun rememberIssuedToken(target: Target, issued: String?) {
+        if (issued.isNullOrEmpty() || issued == activeToken) return
+        activeToken = issued
+        connectedToken = issued
+        val store = tokenStore ?: return
+        scope.launch { runCatching { store.save(target.tv, issued) } }
+    }
+
+    /** Drops the stored token of [target] after the TV rejected the device. */
+    private fun forgetToken(target: Target) {
+        activeToken = null
+        connectedToken = null
+        val store = tokenStore ?: return
+        scope.launch { runCatching { store.clear(target.tv.id) } }
+    }
+
+    /**
      * Builds the control-channel URL:
      * `wss://<host>:8002/api/v2/channels/samsung.remote.control?name=<base64>`,
      * appending `&token=<token>` when a token is replayed.
+     *
+     * The token comes from [activeToken] — the freshest one known — so a
+     * reconnection never falls back to a value the TV has since rotated away.
      */
     private fun buildUrl(target: Target): String {
         val name = Base64.getEncoder()
             .encodeToString(appName.toByteArray(StandardCharsets.UTF_8))
         val base = "$scheme://${target.host}:$port$CONTROL_PATH?name=$name"
-        return if (target.token.isNullOrEmpty()) base else "$base&token=${target.token}"
+        val token = activeToken ?: target.token
+        return if (token.isNullOrEmpty()) base else "$base&token=$token"
     }
 
     /** Exponential backoff, capped at [maxBackoffMillis]. [attempt] is 1-based. */
@@ -450,8 +524,15 @@ class RemoteSession @Inject constructor(
         return scaled.coerceAtMost(maxBackoffMillis)
     }
 
-    /** Connection target: where to connect and which token to replay. */
-    private data class Target(val host: String, val token: String?)
+    /**
+     * Connection target: which TV to connect to and which token to replay.
+     *
+     * The whole [DiscoveredTv] is kept (not just its address) because persisting
+     * a token the TV issues mid-session needs its stable device id.
+     */
+    private data class Target(val tv: DiscoveredTv, val token: String?) {
+        val host: String get() = tv.ipAddress
+    }
 
     /**
      * Result of a single socket lifetime.
@@ -459,10 +540,14 @@ class RemoteSession @Inject constructor(
      * @property wasConnected Whether the socket ever reached the open state; used
      *                        to reset the backoff budget after a stable link drops.
      * @property error        Transport failure that ended the lifetime, if any.
+     * @property unauthorized Whether the TV answered `ms.channel.unauthorized`;
+     *                        terminal, since retrying only re-triggers the TV's
+     *                        on-screen prompt.
      */
     private data class Outcome(
         val wasConnected: Boolean,
         val error: Throwable?,
+        val unauthorized: Boolean = false,
     )
 
     /** Internal lifecycle signals bridged from the OkHttp listener thread. */
@@ -521,6 +606,9 @@ class RemoteSession @Inject constructor(
 
         const val CONTROL_PATH = "/api/v2/channels/samsung.remote.control"
         const val NORMAL_CLOSURE = 1000
+
+        /** Event the TV sends when it refuses the device (prompt denied). */
+        const val EVENT_UNAUTHORIZED = "ms.channel.unauthorized"
 
         const val EVENT_BUFFER = 64
     }

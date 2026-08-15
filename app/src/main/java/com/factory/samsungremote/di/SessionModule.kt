@@ -1,8 +1,10 @@
 package com.factory.samsungremote.di
 
+import com.factory.samsungremote.data.registry.RegistryTokenStore
 import com.factory.samsungremote.network.pairing.LanTrustManager
 import com.factory.samsungremote.network.session.CommandTransport
 import com.factory.samsungremote.network.session.RemoteSession
+import com.factory.samsungremote.network.session.TokenStore
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -63,12 +65,21 @@ object SessionModule {
         // reuses the short-timeout plain-HTTP LAN client the discovery layer
         // provides, since the REST API lives on the same `http://…:8001` plane.
         @DiscoveryHttpClient restClient: OkHttpClient,
+        // Persists tokens the TV rotates mid-session, so the next launch replays
+        // one the set still recognises instead of re-prompting the user.
+        tokenStore: TokenStore,
     ): RemoteSession = RemoteSession(
         // OkHttpClient implements WebSocket.Factory.
         socketFactory = client,
         scope = scope,
         restHttpClient = restClient,
+        tokenStore = tokenStore,
     )
+
+    /** Binds the registry-backed implementation as the session's [TokenStore]. */
+    @Provides
+    @Singleton
+    fun provideTokenStore(store: RegistryTokenStore): TokenStore = store
 
     /**
      * Exposes the live [RemoteSession] as the [CommandTransport] the domain
